@@ -3,14 +3,14 @@ import django
 import decimal, time
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
-sys.path.insert(1, '/home/pi/github/python/cdtool')
+sys.path.insert(1, '/home/carlos_diaz_s3c/python/cdtool')
 from cdmail import SendMailAlertGmail 
 import sys, logging
 from django.utils import timezone
 #Any import from models, views, etc
 from bitsoScaner import models
 import bitso as bt
-from bitso.errors import ApiClientError
+from bitso.errors import ApiClientError, ApiError
 
 class Scanner(object):
     """Bitso Scaner para buscar actualizaciones en la pagina de bitso y de esta manera tomar descisiones de compra"""
@@ -65,7 +65,7 @@ class Scanner(object):
                 total = getattr(xbalance, 'total')
                 total = self.__balanceConverter(name, total)
                 if total != 0:
-                    logging.info("salvando el balance de %s en la BD con un total", name, total)
+                    logging.info("salvando el balance de %s en la BD con un total %.6f", name, total)
                     s = models.BitsoBalance(BitsoAcount=qi, BalanceUpdate=timezone.now(), BalanceCoin=name, Balance=total)
                     s.save()
         else:
@@ -118,7 +118,7 @@ class Scanner(object):
             withdraw = getattr(self.BitsoAPI.fees().withdrawal_fees, coin)
             rr[coin][withdrawal] = withdraw
             logging.debug("recolectado fees y precios de bitso %s", rr)
-        except bitso.ApiError or bitso.ApiClientError:
+        except ApiError: 
             logging.error("Error en la api para recopilar la información de %s", coin)
             return None
         return rr
@@ -133,6 +133,7 @@ class Scanner(object):
         return: Deber regresar el valor de lo que cotiza nuestra moneda para compararlo con lo esperamos recibir
         Algo como  DONT SELL, gross 12221.97, value expected 18000.0
         """
+        correctionvalue=200
         gross = 0
         opsellBalance=0
         decimal.getcontext().prec=8
@@ -144,9 +145,9 @@ class Scanner(object):
                 fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
                 price = opsellBalance - quotedata[t][opsell.DigitalCoin][opsell.DigitalCoin+'_withdrawal_f']
                 price = opsellBalance * quotedata[t][opsell.DigitalCoin]['one_coin_to_mxn']
-                fee = price * fee
-                # menos 100 para acercar a una cotizacion real
-                price = price - fee - 100
+                    #fee = price * fee
+            # menos 100 para acercar a una cotizacion real
+            #price = price - fee + correctionvalue
                 return price
         return None
 
@@ -193,25 +194,28 @@ class Scanner(object):
             dd = self.GetBisto_fee_ticker_data(x[0])
             if dd != None:
                 datasell.append(dd)
+            else:
+                sleep(30)
+                self.Operations()
         if len(dd) == 0:
             logging.error("No se pudo recopilar el costo de las monedas %s", coins)
             raise Exception("No se pudo recopilar los costos de las monedas")
         #print(opsell)
         if opsell is not None:
-        	for ev in opsell:
-	            cuote=self.QuoteToSell(datasell, ev)
-	            if ev.ValorExpected < cuote:
-	                message = "TIME TO SELL, valor cotizado para {} - {}, value expected {}".format(ev.DigitalCoin ,cuote, ev.ValorExpected)
-	                if ev.SendMail == True:
-	                    logging.info("Correo enviado a destinatario para venta")
-	                    self.SendMailWrapper(message, "vender")
-	                else:
-	                    logging.info("Configuracion de sendMail Apagada para venta")
-	                logging.info(message)
-	            else:
-	                message="DONT SELL valor cotizado para {} - {}, valor expected {}".format(ev.DigitalCoin,cuote, ev.ValorExpected)
-	                #self.SendMailWrapper(message, "No vender PRUEBA")
-	                logging.info(message)
+            for ev in opsell:
+                cuote=self.QuoteToSell(datasell, ev)
+                if ev.ValorExpected < cuote:
+                    message = "TIME TO SELL, valor cotizado para {} - {}, value expected {}".format(ev.DigitalCoin ,cuote, ev.ValorExpected)
+                    if ev.SendMail == True:
+                        logging.info("Correo enviado a destinatario para venta")
+                        self.SendMailWrapper(message, "vender")
+                    else:
+                        logging.info("Configuracion de sendMail Apagada para venta")
+                    logging.info(message)
+                else:
+                    message="DONT SELL valor cotizado para {} - {}, valor expected {}".format(ev.DigitalCoin,cuote, ev.ValorExpected)
+                    #self.SendMailWrapper(message, "No vender PRUEBA")
+                    logging.info(message)
         else:
             logging.info("No hay operaciones de Venta")
         print("Verificando la operacion de compra")

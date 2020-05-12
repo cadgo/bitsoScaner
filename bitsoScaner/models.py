@@ -3,7 +3,7 @@ from django.utils import timezone
 # Create your models here.
 
 class  OperationAction(models.Model):
-    SupportedCoins = (('btc', 'btc'), ('eth', 'eth'), ('ltc','ltc'),("tusd", "tusd"))
+    SupportedCoins = (('btc', 'btc'), ('eth', 'eth'), ('ltc','ltc'),("tusd", "tusd"),("bch", "bch"),('xrp','xrp'))
     Description = models.CharField(max_length=250, default='No description')
     Balance = models.FloatField(default=0)
     #Actions = models.FloatField(default=0)
@@ -35,7 +35,7 @@ class OperationBuy(OperationAction):
 
 class BitsoBalance(models.Model):
     BitsoAcount = models.ForeignKey(BitsoAcount, on_delete=models.CASCADE)
-    SupportedBalances = (('btc', 'btc'), ('eth', 'eth'), ('ltc', 'ltc'),('mxn', 'mxn'),("tusd", "tusd"))
+    SupportedBalances = (('btc', 'btc'), ('eth', 'eth'), ('ltc', 'ltc'),('mxn', 'mxn'),("tusd", "tusd"),("bch","bch"),('xrp','xrp'))
     #BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
     BalanceUpdate = models.DateField(default=timezone.now)
     BalanceCoin = models.CharField(max_length=10, choices=SupportedBalances, default='btc')
