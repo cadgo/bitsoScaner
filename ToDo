@@ -1,5 +1,6 @@
 1.- Mejorar los mensajes de log
 agregando la fecha
+el logger esta con fechas diferentes arreglarlo
 
 
 NO COMPRAR tusd: tiene un valor de 23.84, esperamos 22.0
