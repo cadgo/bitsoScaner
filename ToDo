@@ -27,3 +27,12 @@ File "scanner.py", line 249, in <module>
   File "/opt/bitnami/python/lib/python3.7/json/decoder.py", line 355, in raw_decode
     raise JSONDecodeError("Expecting value", s, err.value) from None
 json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+ File "scanner.py", line 258, in <module>
+    Sc.Operations()
+  File "scanner.py", line 214, in Operations
+    cuote=self.QuoteToSell(datasell, ev)
+  File "scanner.py", line 153, in QuoteToSell
+    fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
+TypeError: unsupported operand type(s) for /: 'str' and 'int'
+
