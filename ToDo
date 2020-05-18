@@ -6,7 +6,7 @@ el logger esta con fechas diferentes arreglarlo
 NO COMPRAR tusd: tiene un valor de 23.84, esperamos 22.0
 
 Mostrar la descripcion que se puso y el monto en la cryptodivisa
-DONT SELL valor cotizado para bch - 5671.2541, valor expected 6400.0
+DONT SELL valor cotizado para bch <monto comprado> - 5671.2541, valor expected 6400.0
 
 
 File "scanner.py", line 249, in <module>
