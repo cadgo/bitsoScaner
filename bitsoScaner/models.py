@@ -3,13 +3,14 @@ from django.utils import timezone
 # Create your models here.
 
 class  OperationAction(models.Model):
-    SupportedCoins = (('btc', 'btc'), ('eth', 'eth'), ('ltc','ltc'),("tusd", "tusd"),("bch", "bch"),('xrp','xrp'))
+    SupportedCoins = (('btc', 'btc'), ('eth', 'eth'), ('ltc','ltc'),("tusd", "tusd"),("bch", "bch"),('xrp','xrp'),('gnt','gnt'))
     Description = models.CharField(max_length=250, default='No description')
     Balance = models.FloatField(default=0)
     #Actions = models.FloatField(default=0)
     ValorExpected = models.FloatField(default=0)
     DigitalCoin = models.CharField(max_length=10, choices=SupportedCoins, default='btc')
     SendMail = models.BooleanField(default=True)
+    SlackHook = models.BooleanField(default=True)
 
 class BitsoAcount(models.Model):
     #BistoAcID = models.ForeignKey(BitsoDataConfig, on_delete=models.CASCADE)
@@ -35,7 +36,7 @@ class OperationBuy(OperationAction):
 
 class BitsoBalance(models.Model):
     BitsoAcount = models.ForeignKey(BitsoAcount, on_delete=models.CASCADE)
-    SupportedBalances = (('btc', 'btc'), ('eth', 'eth'), ('ltc', 'ltc'),('mxn', 'mxn'),("tusd", "tusd"),("bch","bch"),('xrp','xrp'))
+    SupportedBalances = (('btc', 'btc'), ('eth', 'eth'), ('ltc', 'ltc'),('mxn', 'mxn'),("tusd", "tusd"),("bch","bch"),('xrp','xrp'),('gnt','gnt'))
     #BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
     BalanceUpdate = models.DateField(default=timezone.now)
     BalanceCoin = models.CharField(max_length=10, choices=SupportedBalances, default='btc')
@@ -53,3 +54,8 @@ class SenderMailAccount(models.Model):
     MailKey = models.CharField(max_length=100)
     BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
     MailReceivers = models.EmailField(max_length=100)
+
+class SlackWebHook(models.Model):
+    name=models.CharField(max_length=100)
+    hook= models.URLField(max_length=200)
+    BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)

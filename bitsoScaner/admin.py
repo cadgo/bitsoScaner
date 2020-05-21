@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import OperationBuy, BitsoAcount, BitsoDataConfig, SenderMailAccount, BitsoBalance, OperationSellTo, OperationBuy
+from .models import *
 from django import forms
 # Register your models here.
 
@@ -10,7 +10,7 @@ class AdminOperationSell(admin.ModelAdmin):
         (None,{'fields': ('Account',)}),
         ('Operation Time', {'fields': ('BuyDate', 'BuyHour')}),
         ('Currency Info', {'fields': ('DigitalCoin', 'Balance', 'ValorExpected', 'ValorCompra')}),
-        (None, {'fields': ('Description','SendMail')}),
+        ('Acciones', {'fields': ('Description','SendMail', 'SlackHook')}),
     )
 @admin.register(OperationBuy)
 class AdminOperationBuy(admin.ModelAdmin):
@@ -18,7 +18,7 @@ class AdminOperationBuy(admin.ModelAdmin):
     fieldsets=(
         ('Info de Cuenta',{'fields': ("Account",)}),
         ('Info de Compra', {'fields': ("DigitalCoin","ValorExpected", "Balance")}),
-        ("Acciones", {"fields": ('Description', 'SendMail')}),
+        ("Acciones", {"fields": ('Description', 'SendMail', 'SlackHook')}),
     )
 
 @admin.register(BitsoBalance)
@@ -38,5 +38,6 @@ class BistoSecretAdmin(admin.ModelAdmin):
 admin.site.register(BitsoAcount, BistoSecretAdmin)
 admin.site.register(BitsoDataConfig)
 admin.site.register(SenderMailAccount)
+admin.site.register(SlackWebHook)
 #admin.site.register(BitsoBalance)
 #admin.site.register(OperationSellTo)

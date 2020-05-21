@@ -5,12 +5,14 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
 sys.path.insert(1, '/home/carlos_diaz_s3c/python/cdtool')
 from cdmail import SendMailAlertGmail 
+from SrvPost import slackWebHookPost
 import sys, logging
 from django.utils import timezone
 #Any import from models, views, etc
 from bitsoScaner import models
 import bitso as bt
 from bitso.errors import ApiClientError, ApiError
+
 
 class Scanner(object):
     """Bitso Scaner para buscar actualizaciones en la pagina de bitso y de esta manera tomar descisiones de compra"""
@@ -23,6 +25,9 @@ class Scanner(object):
         assert len(self.queryinfo)<2, "Solo se puede tener una misma cuenta con el mismo correo; cuentas: {}".format(len(self.queryinfo))
         self.logfile = logfile
         self.AccMail = self.queryinfo[0].bitsomail
+        self.SecsToSleep=30
+        self.ErrorMaxCounter=3
+        self.ErrorsOcurred=1
 
         self.__logfileConfiguration()
 
@@ -35,8 +40,10 @@ class Scanner(object):
         logging.info("connecting with the API")
 
     def __logfileConfiguration(self):
-        logging.basicConfig(filename=self.logfile, format='%(asctime)s %(name)s - %(levelname)s - %(message)s',
-                            level=logging.INFO)
+        logging.Formatter.converter = time.localtime
+        logging.basicConfig(filename=self.logfile, format='%(asctime)s - %(levelname)s - %(message)s',
+                            level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
+        logger = logging.getLogger(__name__)
 
     def __str__(self):
         return "BitSoCaner v{} using account".format(Scanner.Version, self.AccMail)
@@ -118,9 +125,14 @@ class Scanner(object):
             withdraw = getattr(self.BitsoAPI.fees().withdrawal_fees, coin)
             rr[coin][withdrawal] = withdraw
             logging.debug("recolectado fees y precios de bitso %s", rr)
-        except ApiError: 
+        except: 
             logging.error("Error en la api para recopilar la información de %s", coin)
-            return None
+            time.sleep(self.SecsToSleep)
+            self.ErrorsOcurred+=self.ErrorsOcurred
+            logging.error("Se han encontrado %d Errores al recopiar los fees", self.ErrorsOcurred)
+            if self.ErrorsOcurred > self.ErrorMaxCounter:
+                raise ApiError
+            self.GetBisto_fee_ticker_data(coin)
         return rr
 
     def QuoteToSell(self, quotedata, opsell):
@@ -182,8 +194,28 @@ class Scanner(object):
         if s != False:
             return True
 
+    def SendSlackMessage(self, message, operation):
+        #q = models.SlackWebHook.objects.filter(BitsoAcount__bitsomail=self.AccMail)
+        q = models.SlackWebHook.objects.filter(BitsoAcount__bitsomail="cadgo@hotmail.com")
+        if q is None:
+            return None
+        for x in q:
+            webmessage='BitsoScaner Operacion ' + operation + " " + message
+            s=slackWebHookPost(x.hook, webmessage)
+            if s[0] == True:
+                logging.info('Enviendo mensaje slack para la cuenta %s', x.name)
+                return True
+            else:
+                logging.wanrning('No se pudo contactar a Slack error %s', s[1])
+                return False
+
 
     def Operations(self):
+        """
+            Fix: Operations debe regresar una lista de operaciones de venta y compra para enviar las alarmas de todas
+            Ahorita si dos operaciones se sobrelapa solo se manda un mail de la primera y diez minutos la proxima
+            lo cual afecta a que si esa moneda sube en 10 mins ya no se tenga la alerta
+        """
         coins = models.OperationSellTo.SupportedCoins
         datasell = []
         opsell = self.GetOperationSell()
@@ -195,7 +227,7 @@ class Scanner(object):
             if dd != None:
                 datasell.append(dd)
             else:
-                sleep(30)
+                time.sleep(30)
                 self.Operations()
         if len(dd) == 0:
             logging.error("No se pudo recopilar el costo de las monedas %s", coins)
@@ -203,17 +235,22 @@ class Scanner(object):
         #print(opsell)
         if opsell is not None:
             for ev in opsell:
-                cuote=self.QuoteToSell(datasell, ev)
-                if ev.ValorExpected < cuote:
-                    message = "TIME TO SELL, valor cotizado para {} - {}, value expected {}".format(ev.DigitalCoin ,cuote, ev.ValorExpected)
+                quote=self.QuoteToSell(datasell, ev)
+                if ev.ValorExpected < quote:
+                    message = "TIME TO SELL, valor cotizado para {} {} - {}, value expected {}".format(ev.DigitalCoin, ev.Balance ,quote, ev.ValorExpected)
                     if ev.SendMail == True:
                         logging.info("Correo enviado a destinatario para venta")
                         self.SendMailWrapper(message, "vender")
+                        time.sleep(5)
                     else:
                         logging.info("Configuracion de sendMail Apagada para venta")
+                    if ev.SlackHook:
+                        self.SendSlackMessage(message, 'vender')
+                    else:
+                        logging.info("Configuracion para slack Apagada")
                     logging.info(message)
                 else:
-                    message="DONT SELL valor cotizado para {} - {}, valor expected {}".format(ev.DigitalCoin,cuote, ev.ValorExpected)
+                    message="DONT SELL valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
                     #self.SendMailWrapper(message, "No vender PRUEBA")
                     logging.info(message)
         else:
@@ -228,8 +265,13 @@ class Scanner(object):
                     if ev.SendMail:
                         logging.info("Correo enviado a destinatario para compra")
                         self.SendMailWrapper(message, "comprar")
+                        time.sleep(5)
                     else:
                         logging.info("Configuracion de sendMail Apagada para compra")
+                    if ev.SlackHook:
+                        self.SendSlackMessage(message, 'comprar')
+                    else:
+                        logging.info("Configuracion para slack Apagada")
                     logging.info(message)
                 else:
                     message="NO COMPRAR {}: tiene un valor de {}, esperamos {}"\
@@ -244,10 +286,11 @@ if __name__ == '__main__':
     Sc.BitsoConnect()
     Sc.UpdateBitsoBalande()
     logging.info("entrando al loop principal")
-    while True:
+    running=True
+    while running:
         try:
             Sc.Operations()
             time.sleep(Sc.GetConfigScanerRefresh())
         except KeyboardInterrupt:
             print("Saliendo de la aplicación")
-        
+            running=False
