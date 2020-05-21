@@ -1,8 +1,39 @@
 1.- Mejorar los mensajes de log
 agregando la fecha
+el logger esta con fechas diferentes arreglarlo
 
 
 NO COMPRAR tusd: tiene un valor de 23.84, esperamos 22.0
 
 Mostrar la descripcion que se puso y el monto en la cryptodivisa
-DONT SELL valor cotizado para bch - 5671.2541, valor expected 6400.0
+DONT SELL valor cotizado para bch <monto comprado> - 5671.2541, valor expected 6400.0
+
+
+File "scanner.py", line 249, in <module>
+    Sc.Operations()
+  File "scanner.py", line 194, in Operations
+    dd = self.GetBisto_fee_ticker_data(x[0])
+  File "scanner.py", line 118, in GetBisto_fee_ticker_data
+    withdraw = getattr(self.BitsoAPI.fees().withdrawal_fees, coin)
+  File "/opt/bitnami/python/lib/python3.7/site-packages/bitso/api.py", line 301, in fees
+    resp = self._request_url(url, 'GET', private=True)
+  File "/opt/bitnami/python/lib/python3.7/site-packages/bitso/api.py", line 947, in _request_url
+    data = self._parse_json(content if isinstance(content, basestring) else content.decode('utf-8'))
+  File "/opt/bitnami/python/lib/python3.7/site-packages/bitso/api.py", line 974, in _parse_json
+    data = json.loads(json_data)
+  File "/opt/bitnami/python/lib/python3.7/json/__init__.py", line 348, in loads
+    return _default_decoder.decode(s)
+  File "/opt/bitnami/python/lib/python3.7/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/opt/bitnami/python/lib/python3.7/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+ File "scanner.py", line 258, in <module>
+    Sc.Operations()
+  File "scanner.py", line 214, in Operations
+    cuote=self.QuoteToSell(datasell, ev)
+  File "scanner.py", line 153, in QuoteToSell
+    fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
+TypeError: unsupported operand type(s) for /: 'str' and 'int'
+
