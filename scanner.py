@@ -13,7 +13,6 @@ from bitsoScaner import models
 import bitso as bt
 from bitso.errors import ApiClientError, ApiError
 
-
 class Scanner(object):
     """Bitso Scaner para buscar actualizaciones en la pagina de bitso y de esta manera tomar descisiones de compra"""
     Version = 1
@@ -151,9 +150,9 @@ class Scanner(object):
         decimal.getcontext().prec=8
         for t in range(len(quotedata)):
             if opsell.DigitalCoin in quotedata[t]:
-                logging.info("Generando Cotizacion para %s", opsell.DigitalCoin)
+                #logging.info("Generando Cotizacion para %s", opsell.DigitalCoin)
                 opsellBalance = decimal.Decimal(opsell.Balance)
-                logging.info("El balance de %s es %.8f", opsell.DigitalCoin, opsellBalance)
+                #logging.info("El balance de %s es %.8f", opsell.DigitalCoin, opsellBalance)
                 fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
                 price = opsellBalance - quotedata[t][opsell.DigitalCoin][opsell.DigitalCoin+'_withdrawal_f']
                 price = opsellBalance * quotedata[t][opsell.DigitalCoin]['one_coin_to_mxn']
@@ -168,10 +167,10 @@ class Scanner(object):
         for t in range(len(quotedata)):
             if opbuy.DigitalCoin in quotedata[t]:
                 if quotedata[t][opbuy.DigitalCoin]['one_coin_to_mxn'] < opbuy.ValorExpected:
-                    logging.info("Valor de compra Esperado de compra alcanzado")
+                    #logging.info("Valor de compra Esperado de compra alcanzado")
                     return True, quotedata[t][opbuy.DigitalCoin]['one_coin_to_mxn']
                 else:
-                    logging.info("Valor de compra no alcanzado")
+                    #logging.info("Valor de compra no alcanzado")
                     return False, quotedata[t][opbuy.DigitalCoin]['one_coin_to_mxn']
 
     def SendMailWrapper(self, message, operation):
@@ -209,12 +208,58 @@ class Scanner(object):
                 logging.wanrning('No se pudo contactar a Slack error %s', s[1])
                 return False
 
+    def AlarmsGenerator(self, alarmpool):
+        """
+            Genera un buffer con todos los mensajes que seran enviados de un shoot y los envia a slack o al mail
+        """
+        #Gestor de envio de alarmas
+        lenOpSell=len(alarmpool["opsell"])
+        lenOpBuy=len(alarmpool["opbuy"])
+        #Aqui se almacenan todos los mensajes que seran enviandos
+        messagesell=messagebuy=""
+        mailsell=slacksell=mailbuy=slackbuy=None
+        if lenOpSell and lenOpBuy == 0:return False
+        if lenOpSell > 0:
+            for a in alarmpool["opsell"]:
+                #choser={'SendMail': lambda: if a[0].SendMail: self.SendMailWrapper() , 'SlackHook': "slackfunc"}
+                coin=a[0].DigitalCoin ; Balance=a[0].Balance
+                quote=a[1] ; ValueExpected=a[0].ValorExpected
+                message="HORA DE VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(coin, Balance, quote, ValueExpected)
+                if a[0].SendMail or a[0].SlackHook:
+                    messagesell+=message+"\n"
+                if a[0].SendMail:
+                    mailsell="sell-mail"
+                if a[0].SlackHook:
+                    slacksell="sell-slack"
+                logging.info(message)
+        else:
+            logging.warning("No hay Alarmas de Ventas :(")
+        if lenOpBuy > 0:
+            for a in alarmpool["opbuy"]:
+                coin=a[0].DigitalCoin; quote=a[1]
+                ValueExpected=a[0].ValorExpected
+                message = "HORA DE COMPRAR, {}: tiene un valor de {} esperamos {}".format(coin, quote, ValueExpected)
+                if a[0].SendMail or a[0].SlackHook:
+                    messagebuy+=message+"\n"
+                if a[0].SendMail:
+                    mailbuy="buy-mail"
+                if a[0].SlackHook:
+                    slackbuy="buy-slack"
+                logging.info(message)
+        else:
+            logging.warning("No hay alarmas de compra :(")
+        sw={"sell-mail": lambda: self.SendMailWrapper(messagesell, "vender"),
+            "sell-slack": lambda: self.SendSlackMessage(messagesell, "vender"),
+            "buy-mail": lambda: self.SendMailWrapper(messagebuy, "comprar"),
+            "buy-slack": lambda: self.SendSlackMessage(messagebuy, "comprar")}
+        cc=[mailsell,slacksell, mailbuy, slackbuy]
+        for c in cc:
+            sw.get(c, lambda:None)()
+        return True
 
     def Operations(self):
         """
-            Fix: Operations debe regresar una lista de operaciones de venta y compra para enviar las alarmas de todas
-            Ahorita si dos operaciones se sobrelapa solo se manda un mail de la primera y diez minutos la proxima
-            lo cual afecta a que si esa moneda sube en 10 mins ya no se tenga la alerta
+			Regresa todas las operaciones de venta en una tupla de opsell y opbuy, en un conjunto
         """
         coins = models.OperationSellTo.SupportedCoins
         datasell = []
@@ -222,6 +267,7 @@ class Scanner(object):
         opbuy = self.GetOperationBuy()
         logging.info("Tenemos %d operaciones de venta", len(opsell))
         logging.info("Recopilando información de precio de las cryptomonedas")
+        messageinfo = {"opsell":[], "opbuy":[]}
         for x in coins:
             dd = self.GetBisto_fee_ticker_data(x[0])
             if dd != None:
@@ -237,46 +283,23 @@ class Scanner(object):
             for ev in opsell:
                 quote=self.QuoteToSell(datasell, ev)
                 if ev.ValorExpected < quote:
-                    message = "TIME TO SELL, valor cotizado para {} {} - {}, value expected {}".format(ev.DigitalCoin, ev.Balance ,quote, ev.ValorExpected)
-                    if ev.SendMail == True:
-                        logging.info("Correo enviado a destinatario para venta")
-                        self.SendMailWrapper(message, "vender")
-                        time.sleep(5)
-                    else:
-                        logging.info("Configuracion de sendMail Apagada para venta")
-                    if ev.SlackHook:
-                        self.SendSlackMessage(message, 'vender')
-                    else:
-                        logging.info("Configuracion para slack Apagada")
-                    logging.info(message)
+                    messageinfo["opsell"].append([ev, quote])
                 else:
-                    message="DONT SELL valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
-                    #self.SendMailWrapper(message, "No vender PRUEBA")
+                    message="NO VENDER: valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
                     logging.info(message)
-        else:
-            logging.info("No hay operaciones de Venta")
-        print("Verificando la operacion de compra")
         if opbuy is not None:
             for ev in opbuy:
                 ttb, val = self.QuoteToBuy(datasell, ev)
                 if ttb:
-                    message = "HORA DE COMPRAR, {}: tiene un valor de {} esperamos {}".\
-                        format(ev.DigitalCoin, val, ev.ValorExpected)
-                    if ev.SendMail:
-                        logging.info("Correo enviado a destinatario para compra")
-                        self.SendMailWrapper(message, "comprar")
-                        time.sleep(5)
-                    else:
-                        logging.info("Configuracion de sendMail Apagada para compra")
-                    if ev.SlackHook:
-                        self.SendSlackMessage(message, 'comprar')
-                    else:
-                        logging.info("Configuracion para slack Apagada")
-                    logging.info(message)
+                    messageinfo["opbuy"].append([ev, val])
                 else:
-                    message="NO COMPRAR {}: tiene un valor de {}, esperamos {}"\
-                        .format(ev.DigitalCoin, val, ev.ValorExpected)
+                    message="NO COMPRAR {}: tiene un valor de {}, esperamos {}".format(ev.DigitalCoin, val, ev.ValorExpected)
                     logging.info(message)
+        #print(messageinfo)
+        if len(messageinfo["opsell"]) and len(messageinfo["opbuy"]) == 0:
+            print("No hay mensajes que evniar")
+            return False            
+        return messageinfo
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
@@ -289,8 +312,11 @@ if __name__ == '__main__':
     running=True
     while running:
         try:
-            Sc.Operations()
+            alarms=Sc.Operations()
+            Sc.AlarmsGenerator(alarms)
             time.sleep(Sc.GetConfigScanerRefresh())
+            #REMOVER PARA QUE FUNCIONE EN EL LOOP
+            #running=False
         except KeyboardInterrupt:
             print("Saliendo de la aplicación")
             running=False
