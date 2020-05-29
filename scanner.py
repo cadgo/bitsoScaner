@@ -208,6 +208,13 @@ class Scanner(object):
                 logging.wanrning('No se pudo contactar a Slack error %s', s[1])
                 return False
 
+    def MessagaSellOrBuy(self, op, no_value,*args):
+        tt={
+        'vender': lambda: "{} VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(no_value,args[0], args[1], args[2], args[3]),
+        'comprar': lambda: "{} COMPRAR, {}: tiene un valor de {} esperamos {}".format(no_value,args[0], args[1], args[2]),
+        }.get(op, lambda: None)()
+        return tt
+
     def AlarmsGenerator(self, alarmpool):
         """
             Genera un buffer con todos los mensajes que seran enviados de un shoot y los envia a slack o al mail
@@ -224,7 +231,8 @@ class Scanner(object):
                 #choser={'SendMail': lambda: if a[0].SendMail: self.SendMailWrapper() , 'SlackHook': "slackfunc"}
                 coin=a[0].DigitalCoin ; Balance=a[0].Balance
                 quote=a[1] ; ValueExpected=a[0].ValorExpected
-                message="HORA DE VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(coin, Balance, quote, ValueExpected)
+                #message="HORA DE VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(coin, Balance, quote, ValueExpected)
+                message=self.MessagaSellOrBuy('vender', "", coin, Balance, quote, ValueExpected)
                 if a[0].SendMail or a[0].SlackHook:
                     messagesell+=message+"\n"
                 if a[0].SendMail:
@@ -238,7 +246,8 @@ class Scanner(object):
             for a in alarmpool["opbuy"]:
                 coin=a[0].DigitalCoin; quote=a[1]
                 ValueExpected=a[0].ValorExpected
-                message = "HORA DE COMPRAR, {}: tiene un valor de {} esperamos {}".format(coin, quote, ValueExpected)
+                #message = "HORA DE COMPRAR, {}: tiene un valor de {} esperamos {}".format(coin, quote, ValueExpected)
+                message=self.MessagaSellOrBuy("comprar", "", coin, quote, ValueExpected)
                 if a[0].SendMail or a[0].SlackHook:
                     messagebuy+=message+"\n"
                 if a[0].SendMail:
@@ -253,13 +262,14 @@ class Scanner(object):
             "buy-mail": lambda: self.SendMailWrapper(messagebuy, "comprar"),
             "buy-slack": lambda: self.SendSlackMessage(messagebuy, "comprar")}
         cc=[mailsell,slacksell, mailbuy, slackbuy]
+        #c=[b.get(a, lambda:None)() for a in ['mailsell', 'slacksell', 'mailbuy', 'slackbuy']]
         for c in cc:
             sw.get(c, lambda:None)()
         return True
 
     def Operations(self):
         """
-			Regresa todas las operaciones de venta en una tupla de opsell y opbuy, en un conjunto
+            Regresa todas las operaciones de venta en una tupla de opsell y opbuy, en un conjunto
         """
         coins = models.OperationSellTo.SupportedCoins
         datasell = []
@@ -285,7 +295,8 @@ class Scanner(object):
                 if ev.ValorExpected < quote:
                     messageinfo["opsell"].append([ev, quote])
                 else:
-                    message="NO VENDER: valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
+                    #message="NO VENDER: valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
+                    message=self.MessagaSellOrBuy("vender", "NO", ev.DigitalCoin, ev.Balance, quote, ev.ValorExpected)
                     logging.info(message)
         if opbuy is not None:
             for ev in opbuy:
@@ -293,7 +304,8 @@ class Scanner(object):
                 if ttb:
                     messageinfo["opbuy"].append([ev, val])
                 else:
-                    message="NO COMPRAR {}: tiene un valor de {}, esperamos {}".format(ev.DigitalCoin, val, ev.ValorExpected)
+                    #message="NO COMPRAR {}: tiene un valor de {}, esperamos {}".format(ev.DigitalCoin, val, ev.ValorExpected)
+                    message=self.MessagaSellOrBuy("comprar", "NO", ev.DigitalCoin, val, ev.ValorExpected)
                     logging.info(message)
         #print(messageinfo)
         if len(messageinfo["opsell"]) and len(messageinfo["opbuy"]) == 0:
