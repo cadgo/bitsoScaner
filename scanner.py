@@ -103,10 +103,7 @@ class Scanner(object):
 
     def GetBisto_fee_ticker_data(self, coin):
         """
-            quantity: la cantidad de dinero que se tiene
-            One<coint>TotMXN: cuantos pesos es una divisa
-            btisofee: porcentaje de fee q cobra bitso
-            <coin>withdrawal_f: el fee de withdrawal
+			self.BitsoAPI.ticker meterlo a la BD
         """
         book=coin+'_mxn'
         one_coin_to_mxn='one_'+coin+'_to_mxn'
@@ -210,7 +207,7 @@ class Scanner(object):
 
     def MessagaSellOrBuy(self, op, no_value,*args):
         tt={
-        'vender': lambda: "{} VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(no_value,args[0], args[1], args[2], args[3]),
+        'vender': lambda: "{} VENDER, valor para {} {} [Adqurido x {}]- [Cot en {}], valor esperado {}".format(no_value,args[0], args[1], args[2], args[3], args[4]),
         'comprar': lambda: "{} COMPRAR, {}: tiene un valor de {} esperamos {}".format(no_value,args[0], args[1], args[2]),
         }.get(op, lambda: None)()
         return tt
@@ -220,6 +217,7 @@ class Scanner(object):
             Genera un buffer con todos los mensajes que seran enviados de un shoot y los envia a slack o al mail
         """
         #Gestor de envio de alarmas
+        print(alarmpool)
         lenOpSell=len(alarmpool["opsell"])
         lenOpBuy=len(alarmpool["opbuy"])
         #Aqui se almacenan todos los mensajes que seran enviandos
@@ -232,7 +230,7 @@ class Scanner(object):
                 coin=a[0].DigitalCoin ; Balance=a[0].Balance
                 quote=a[1] ; ValueExpected=a[0].ValorExpected
                 #message="HORA DE VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(coin, Balance, quote, ValueExpected)
-                message=self.MessagaSellOrBuy('vender', "", coin, Balance, quote, ValueExpected)
+                message=self.MessagaSellOrBuy('vender', "", coin ,Balance, a[0].ValorCompra,quote, ValueExpected)
                 if a[0].SendMail or a[0].SlackHook:
                     messagesell+=message+"\n"
                 if a[0].SendMail:
@@ -296,7 +294,7 @@ class Scanner(object):
                     messageinfo["opsell"].append([ev, quote])
                 else:
                     #message="NO VENDER: valor cotizado para {} {} - {}, valor expected {}".format(ev.DigitalCoin, ev.Balance,quote, ev.ValorExpected)
-                    message=self.MessagaSellOrBuy("vender", "NO", ev.DigitalCoin, ev.Balance, quote, ev.ValorExpected)
+                    message=self.MessagaSellOrBuy("vender", "NO", ev.DigitalCoin,ev.Balance,ev.ValorCompra, quote, ev.ValorExpected)
                     logging.info(message)
         if opbuy is not None:
             for ev in opbuy:
@@ -310,7 +308,7 @@ class Scanner(object):
         #print(messageinfo)
         if len(messageinfo["opsell"]) and len(messageinfo["opbuy"]) == 0:
             print("No hay mensajes que evniar")
-            return False            
+            messageinfo = {"opsell":[], "opbuy":[]}         
         return messageinfo
 
 if __name__ == '__main__':
