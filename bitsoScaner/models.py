@@ -59,3 +59,12 @@ class SlackWebHook(models.Model):
     name=models.CharField(max_length=100)
     hook= models.URLField(max_length=200)
     BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
+
+class BitsoTicker(models.Model):
+    bookname=models.CharField(max_length=256)
+    ask=models.FloatField(default=0)
+    bid=models.FloatField(default=0)
+    high=models.FloatField(default=0)
+    last=models.FloatField(default=0)
+    low=models.FloatField(default=0)
+    datetime=models.DateTimeField()

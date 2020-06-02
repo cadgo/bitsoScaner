@@ -108,13 +108,22 @@ class Scanner(object):
         book=coin+'_mxn'
         one_coin_to_mxn='one_'+coin+'_to_mxn'
         withdrawal=coin+'_withdrawal_f'
+        tickerdatabase=None
         rr = {}
         try:
             rr.update({coin:{'one_coin_to_mxn': '', withdrawal: '', 'bitso_percent_fee':'', }})
-            #rr['One'+coin+'TotMXN': float(self.BitsoAPI.ticker(coin+'_mxn').last)]
-            lastvalue = self.BitsoAPI.ticker(book).bid
-            #print(self.BitsoAPI.ticker(book))
-            #print("lastvalue", lastvalue)
+            ticker=self.BitsoAPI.ticker(book)
+            tickerdatabase=models.BitsoTicker.objects.create(
+                bookname=coin,
+                ask=ticker.ask,
+                bid=ticker.bid,
+                high=ticker.high,
+                last=ticker.last,
+                low=ticker.low,
+                datetime=ticker.created_at
+                )
+            tickerdatabase.save()
+            lastvalue = ticker.bid
             rr[coin]['one_coin_to_mxn']=lastvalue
             feepercent=getattr(self.BitsoAPI.fees(), book).fee_percent
             rr[coin]['bitso_percent_fee'] = feepercent
@@ -217,13 +226,12 @@ class Scanner(object):
             Genera un buffer con todos los mensajes que seran enviados de un shoot y los envia a slack o al mail
         """
         #Gestor de envio de alarmas
-        print(alarmpool)
         lenOpSell=len(alarmpool["opsell"])
         lenOpBuy=len(alarmpool["opbuy"])
         #Aqui se almacenan todos los mensajes que seran enviandos
         messagesell=messagebuy=""
         mailsell=slacksell=mailbuy=slackbuy=None
-        if lenOpSell and lenOpBuy == 0:return False
+        if lenOpSell == 0 and lenOpBuy == 0:return False #Esta linea esta mals
         if lenOpSell > 0:
             for a in alarmpool["opsell"]:
                 #choser={'SendMail': lambda: if a[0].SendMail: self.SendMailWrapper() , 'SlackHook': "slackfunc"}
@@ -306,9 +314,9 @@ class Scanner(object):
                     message=self.MessagaSellOrBuy("comprar", "NO", ev.DigitalCoin, val, ev.ValorExpected)
                     logging.info(message)
         #print(messageinfo)
-        if len(messageinfo["opsell"]) and len(messageinfo["opbuy"]) == 0:
+        if len(messageinfo["opsell"]) ==0  and len(messageinfo["opbuy"]) == 0:
             print("No hay mensajes que evniar")
-            messageinfo = {"opsell":[], "opbuy":[]}         
+            messageinfo = {"opsell":[], "opbuy":[]}        
         return messageinfo
 
 if __name__ == '__main__':
@@ -323,6 +331,7 @@ if __name__ == '__main__':
     while running:
         try:
             alarms=Sc.Operations()
+            #print("Alarms", alarms)
             Sc.AlarmsGenerator(alarms)
             time.sleep(Sc.GetConfigScanerRefresh())
             #REMOVER PARA QUE FUNCIONE EN EL LOOP

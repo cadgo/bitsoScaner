@@ -1,5 +1,5 @@
 
-1- Generar pantalla con inteligencia de compra, req prev loggin de usuario        
+1- Generar pantalla con inteligencia de compra, req prev loggin de usuario, inyectar los ticker en la BD      
 2- compras y ventas automatizadas
 3- Poner un servidor web
 4 - Mandar los datos de  - self.BitsoAPI.ticker a la BD
