@@ -1,0 +1,53 @@
+{% extends 'bitsoScaner/base.html' %}
+{% block title %}
+    BitSoScaner
+{% endblock %}
+{% block content %}
+<section class="jumbotron bg-info text-center">
+	<div class="container">
+		<H1>{{coin | upper}} Dashboard</H1>
+		<p class="lead">Revision inteligente sobre inversion {{coin}}</p>
+	</div>
+</section>
+{% if error %}
+	<h1>Error procesing Query: {{ error }}</h1>
+{% else %}	
+<div class="album py-5 bg-light">
+	<div class="container">
+		<div class="row">
+			{% for form in forms %}
+			<div class="col-md-4">
+				<div class="card mb-4 shadow-sm">
+					<div class="p-3 mb-2 bg-dark text-white text-center" name="QuoteEntry" id="QuoteEntry{{forloop.counter0}}">{{form.Monto.value}}</div>
+					<div class="card-body">	
+              		{{ form.as_p }}
+               		 </div>
+                	<small class="text-muted">9 mins</small>
+              	</div>
+			</div>
+			{% endfor %}
+		</div>
+	</div>
+</div>
+<script type="text/javascript">
+function CalcQuote() {
+    var elements=document.getElementsByName("QuoteEntry");
+    var ellength=elements.length;
+    var QuoteVar, MaxVal, MinVal, Quote;
+    for(x=0; x<ellength; x++)
+    {
+    	QuoteVar=parseFloat(elements[x].innerText);
+    	MaxVal=parseFloat(document.getElementById("id_form-"+x+"-Max_Value").value);
+    	MinVal=parseFloat(document.getElementById("id_form-"+x+"-Min_Value").value);
+    	Quote=QuoteVar/MinVal;
+    	Quote=Quote*MaxVal;
+    	Quote=Quote.toFixed(3);
+    	NewMonto=document.getElementById("id_form-"+x+"-Monto");
+    	NewMonto.value=Quote;
+    	console.log(Quote)
+    }
+}
+window.onload = CalcQuote;
+</script>
+{% endif %}
+{% endblock %}

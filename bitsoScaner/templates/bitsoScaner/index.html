@@ -1,0 +1,28 @@
+{% extends 'bitsoScaner/base.html' %}
+{% block title %}
+    BitSoScaner
+{% endblock %}
+{% block content %}
+<section class="jumbotron bg-info text-center">
+	<div class="container">
+		<H1>Bitso Dashboard</H1>
+		<p class="lead">Revision inteligente sobre inversion</p>
+	</div>
+</section>
+<div class="album py-5 bg-light">
+	<div class="container">
+		<div class="row">
+			<div class="col-md-4">
+				<div class="card mb-4 shadow-sm">
+					<div class="p-3 mb-2 bg-dark text-white text-center">BTC</div>
+					<div class="card-body">	
+              		{{ form.as_p }}
+                </div>
+                <small class="text-muted">9 mins</small>
+              </div>
+			</div>
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}
