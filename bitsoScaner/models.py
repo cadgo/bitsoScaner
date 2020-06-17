@@ -46,8 +46,9 @@ class BitsoDataConfig(models.Model):
     BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
     ConfigName=models.CharField(max_length=100)
     bitsoScanerRefresh = models.DecimalField(max_digits=2, decimal_places=0)
-    #MailReceivers = models.EmailField(max_length=100)
-    #MailAccountID = models.ForeignKey(SenderMailAccount, on_delete=models.CASCADE)
+    quote1=models.FloatField(default=10000)    
+    quote2=models.FloatField(default=10000)    
+    quote3=models.FloatField(default=10000)
 
 class SenderMailAccount(models.Model):
     MailAccount = models.EmailField(max_length=100)

@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
 import os, sys
 import django
 import decimal, time
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
 sys.path.insert(1, '/home/carlos_diaz_s3c/python/cdtool')
-from cdmail import SendMailAlertGmail 
+from cdmail import SendMailAlertGmail
 from SrvPost import slackWebHookPost
 import sys, logging
 from django.utils import timezone
@@ -25,7 +26,7 @@ class Scanner(object):
         self.logfile = logfile
         self.AccMail = self.queryinfo[0].bitsomail
         self.SecsToSleep=30
-        self.ErrorMaxCounter=3
+        self.ErrorMaxCounter=5
         self.ErrorsOcurred=1
 
         self.__logfileConfiguration()
@@ -103,7 +104,7 @@ class Scanner(object):
 
     def GetBisto_fee_ticker_data(self, coin):
         """
-			self.BitsoAPI.ticker meterlo a la BD
+            self.BitsoAPI.ticker meterlo a la BD
         """
         book=coin+'_mxn'
         one_coin_to_mxn='one_'+coin+'_to_mxn'
@@ -123,7 +124,8 @@ class Scanner(object):
                 datetime=ticker.created_at
                 )
             tickerdatabase.save()
-            lastvalue = ticker.bid
+            #lastvalue = ticker.bid
+            lastvalue = ticker.last
             rr[coin]['one_coin_to_mxn']=lastvalue
             feepercent=getattr(self.BitsoAPI.fees(), book).fee_percent
             rr[coin]['bitso_percent_fee'] = feepercent
@@ -159,10 +161,19 @@ class Scanner(object):
                 #logging.info("Generando Cotizacion para %s", opsell.DigitalCoin)
                 opsellBalance = decimal.Decimal(opsell.Balance)
                 #logging.info("El balance de %s es %.8f", opsell.DigitalCoin, opsellBalance)
-                fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
-                price = opsellBalance - quotedata[t][opsell.DigitalCoin][opsell.DigitalCoin+'_withdrawal_f']
-                price = opsellBalance * quotedata[t][opsell.DigitalCoin]['one_coin_to_mxn']
+                try:
+                    fee = quotedata[t][opsell.DigitalCoin]["bitso_percent_fee"]/ 100
+                    price = opsellBalance - quotedata[t][opsell.DigitalCoin][opsell.DigitalCoin+'_withdrawal_f']
+                    price = opsellBalance * quotedata[t][opsell.DigitalCoin]['one_coin_to_mxn']
                     #fee = price * fee
+                except TypeError:
+                    logging.error("Error en la api para recopilar la información de %s", quotedata)
+                    time.sleep(self.SecsToSleep)
+                    self.ErrorsOcurred+=self.ErrorsOcurred
+                    logging.error("Se han encontrado %d Errores al generar la cotizacion de venta", self.ErrorsOcurred)
+                    if self.ErrorsOcurred > self.ErrorMaxCounter:
+                        raise ApiError
+                    self.QuoteToSell(quotedata, opsell)
             # menos 100 para acercar a una cotizacion real
             #price = price - fee + correctionvalue
                 return price
@@ -231,10 +242,9 @@ class Scanner(object):
         #Aqui se almacenan todos los mensajes que seran enviandos
         messagesell=messagebuy=""
         mailsell=slacksell=mailbuy=slackbuy=None
-        if lenOpSell == 0 and lenOpBuy == 0:return False #Esta linea esta mals
+        if lenOpSell == 0 and lenOpBuy == 0:return False 
         if lenOpSell > 0:
             for a in alarmpool["opsell"]:
-                #choser={'SendMail': lambda: if a[0].SendMail: self.SendMailWrapper() , 'SlackHook': "slackfunc"}
                 coin=a[0].DigitalCoin ; Balance=a[0].Balance
                 quote=a[1] ; ValueExpected=a[0].ValorExpected
                 #message="HORA DE VENDER, valor cotizado para {} {} - {}, valor esperado {}".format(coin, Balance, quote, ValueExpected)
@@ -323,6 +333,8 @@ if __name__ == '__main__':
     if len(sys.argv) < 1:
         print("Se requiere una cuenta valida para continuar")
         sys.exit()
+    #processtools.pidfile="scanner.pid"
+    #processtools.WritePidFile("./")
     Sc = Scanner(sys.argv[1])
     Sc.BitsoConnect()
     Sc.UpdateBitsoBalande()
