@@ -10,7 +10,7 @@ class AdminOperationSell(admin.ModelAdmin):
         (None,{'fields': ('Account',)}),
         ('Operation Time', {'fields': ('BuyDate', 'BuyHour')}),
         ('Currency Info', {'fields': ('DigitalCoin', 'Balance', 'ValorExpected', 'ValorCompra')}),
-        ('Acciones', {'fields': ('Description','SendMail', 'SlackHook')}),
+        ('Acciones', {'fields': ('Description','SendMail', 'SlackHook', 'AutoSell')}),
     )
 @admin.register(OperationBuy)
 class AdminOperationBuy(admin.ModelAdmin):
@@ -39,5 +39,6 @@ admin.site.register(BitsoAcount, BistoSecretAdmin)
 admin.site.register(BitsoDataConfig)
 admin.site.register(SenderMailAccount)
 admin.site.register(SlackWebHook)
+admin.site.register(SellQueueOp)
 #admin.site.register(BitsoBalance)
 #admin.site.register(OperationSellTo)

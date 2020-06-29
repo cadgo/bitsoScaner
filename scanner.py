@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys
+import os, sys, datetime
 import django
 import decimal, time
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
@@ -28,6 +28,7 @@ class Scanner(object):
         self.SecsToSleep=30
         self.ErrorMaxCounter=5
         self.ErrorsOcurred=1
+        self.DefaultOpCount=models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=bitsoMail).get().OperationCount
 
         self.__logfileConfiguration()
 
@@ -232,6 +233,131 @@ class Scanner(object):
         }.get(op, lambda: None)()
         return tt
 
+    def OpSellAndBuy(self, alarmpool):
+        """
+            Generamos las operaciones de venta o compra automatizadas
+            1) Validamos si existen operaciones de venta para algun libro
+            1.1) Las operaciones de venta no deben sobre pasar los 3 ticks activas
+            1.2) Si pasan mas de 3 ticks se quitan las operaciones
+            2) Si no existen se generan las operaciones de venta pertinente basadas en las alarmas
+            2) Se debe guardar el OID en la BD para preguntar por ella cada vez
+            3) Si existe esa operacion de venta la dejamos para la funcion secundaria que la removera de la BD
+
+            SE deben hacer dos funciones ya que si la alarma de venta no se da se quedan colgadas las operaciones de venta una funcion toma lo de alarm pool y genera la cotizacion la otra funcion siempre esta viendo el estado de la operacion y la quita cuando ya no este en tiempo o si se vendio pues la removemos de la BD 
+        una vez q se venda la operacion tenemos que ir nuevamente por el balance antes poner la operacion tenemos que ver que tengnamos balance de esa criptomoneda dispnibile, la op no puede pasar el balance
+        """
+        dummyOID="zzzZZZZZZzzzzzZZZZ"
+        lenOpSell=len(alarmpool["opsell"])
+        lenOpBuy=len(alarmpool["opbuy"])
+        if lenOpSell == 0 and lenOpBuy == 0: return False
+        if lenOpSell > 0:
+            for a in alarmpool['opsell']:
+                if a[0].AutoSell == True:
+                    coin=a[0].DigitalCoin; book=coin+'_mxn';
+                    ipk=a[0].pk; major=a[0].Balance; price=self.BitsoAPI.ticker(book).last
+                    if price <= 0:
+                        logging.error(f"No fue posible obtener el ultimo precio de la moneda {coin}, valor menor a 0")
+                        break
+                    #Tenemos que ir por el balance total a la BD para cumplir la ultima validacion de que no sea la op mayor al balance total
+                    oid = models.SellQueueOp.objects.filter(OpSell__pk=ipk)
+                    global_balance=models.BitsoBalance.objects.filter(BalanceCoin=coin).get().Balance
+                    if len(oid) == 0 and major < global_balance:
+                        #generamos OID por primera ves UNA VEZ GENERADA LA ORDEN MANDAR UN MAIL
+                        logging.info(f"GENERANDO ORDEN: book {book}, side sell, oder_type limit, major {major}, price {price}")
+                        ### TEST
+                        #La operacione major q es el balance y el price es el ticker.last por q la order es por unidad
+                        ret=self.BitsoAPI.place_order(book=book, side='sell', order_type='limit', major=str(major), price=str(price))
+                        if ret.get('oid') == None:
+                            logging.error('No fue posible generar la Orden, None Return')
+                            break
+                        mod=models.OperationSellTo.objects.get(pk=ipk)
+                        newqueue=models.SellQueueOp(OpSell=mod, Date=datetime.datetime.now(),OID=ret.get('oid'),OpCount=0)
+                        newqueue.save()
+                        logging.info("Debemos Generar un OID para el PK %d", ipk)
+                        #### TEST
+                    else:
+                        logging.info(f"No tenemos sufciente balance para la operacion Gbalance {global_balance}, major {major}")
+                else:
+                    logging.debug(f"Autosell  apagado para {a[0].DigitalCoin} para la Op PK {a[0].pk} fecha {a[0].BuyDate} {a[0].BuyHour}")
+        #if lenOpBuy > 0:
+        #    for a in alarmpool['opbuy']:
+        #        print("Operacion de compra ", ipk)
+        return True
+
+    def OperationFollow(self):
+        """
+            Da seguimiento a las ventas de tal manera que las quita una vez que pasa el contandor SellQueueOp.OpCount 
+            Si no existen operaciones de venta salimos con False
+            Si existen operaciones cehcamos el contador
+                si SellQueueOp.OpCount es mayor a BitsoDataConfig.OperationCount damos de baja la operacion
+                si no es mayor incrementando el contador y salimos con True
+            Si todo sale bien salimos con True
+            Cuando uemos bitsoapi, place_order regresa un dict una validacion es pedir el oir, si no existe ese oid o es cero no se creo la operacion
+            una forma de validar en ves de raise de un error por keyvalue, es usar dict.get('oid') si da none es que no se genero
+            
+            PROBAR:
+            1 .- DOS OPERACIONES CON LA MISMA MONEDA ok 
+            2. DOS OPERACIONES CON DIF MONEDA ok
+            3 REMOVER EN MEDIO DE DEL PROCESO EN BITSO EL OID ok
+            4 PONER UN OID QUE NO EXISTE ok
+            5 PONER DOS OPERACIONES DE LA MISMA MONEDA Y REMOVER 1 ok
+        """
+        sellpendings=[]
+        operations=models.SellQueueOp.objects.filter()
+        BitConfigCount=models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=self.AccMail).get().OperationCount 
+        if len(operations) == 0:
+            logging.info("No hay operaciones a dar seguimiento encoladas")
+            return False
+        else:
+            for opsi in operations:
+               curcount=opsi.OpCount
+               if curcount > BitConfigCount:
+                   #damos de baja la operacion
+                   op_pk=opsi.OpSell.pk
+                   currentCoin=opsi.OpSell.DigitalCoin
+                   desc=opsi.OpSell.Description
+                   ##### TEST
+                   if opsi.OID == self.BitsoAPI.cancel_order(opsi.OID)[0]:
+                       logging.info(f"Dando de baja operación de {currentCoin} pk {op_pk} descripcion {desc} en el peer remoto por tiempo alcanzado")
+                   else:
+                       logging.info(f"No fue posible dar de baja  {currentCoin} pk {op_pk} descripcion {desc} en el peer remoto")
+                   ####### TEST
+                   opsi.OpSell.AutoSell=False
+                   opsi.OpSell.save()
+                   opsi.delete()
+               else:
+                   book=opsi.OpSell.DigitalCoin+'_mxn'
+                   ####TEST
+                   exist=0
+                   oo=self.BitsoAPI.open_orders(book)
+                   if len(oo) == 0:
+                       #Borramos la operacion actaul
+                       logging.info(f"No hay operaciones en bitso que reflejen esta entrada {opsi.OpSell.DigitalCoin} Valor esperado {opsi.OpSell.ValorExpected} BORRANDO PK {opsi.pk}")
+                       opsi.OpSell.AutoSell=False
+                       opsi.OpSell.save()
+                       opsi.delete()
+                       break
+                   else:
+                       for pord in oo:
+                           if pord.oid == opsi.OID:
+                               exist=exist+1
+                   if exist ==0:
+                       logging.info(f"Eliminando el OID {opsi.OID} NO CONCUERDA CON REMOTO POSIBLE VENTA :)")
+                       self.UpdateBitsoBalande()
+                       opsi.OpSell.AutoSell=False
+                       opsi.OpSell.save()
+                       opsi.delete()
+                       break
+                   ####### TEST
+                   sellpendings.append(opsi.OpSell.pk)
+                   opsi.OpCount=curcount+1
+                   opsi.save()
+            if len(sellpendings) > 0:
+                logging.info("Operaciones de venta corriendo PK%s", sellpendings) 
+            return True
+
+
+
     def AlarmsGenerator(self, alarmpool):
         """
             Genera un buffer con todos los mensajes que seran enviados de un shoot y los envia a slack o al mail
@@ -333,8 +459,6 @@ if __name__ == '__main__':
     if len(sys.argv) < 1:
         print("Se requiere una cuenta valida para continuar")
         sys.exit()
-    #processtools.pidfile="scanner.pid"
-    #processtools.WritePidFile("./")
     Sc = Scanner(sys.argv[1])
     Sc.BitsoConnect()
     Sc.UpdateBitsoBalande()
@@ -345,6 +469,9 @@ if __name__ == '__main__':
             alarms=Sc.Operations()
             #print("Alarms", alarms)
             Sc.AlarmsGenerator(alarms)
+            #----------------------
+            Sc.OpSellAndBuy(alarms)
+            Sc.OperationFollow()
             time.sleep(Sc.GetConfigScanerRefresh())
             #REMOVER PARA QUE FUNCIONE EN EL LOOP
             #running=False

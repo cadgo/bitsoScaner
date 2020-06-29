@@ -18,10 +18,12 @@
 			{% for form in forms %}
 			<div class="col-md-4">
 				<div class="card mb-4 shadow-sm">
-					<div class="p-3 mb-2 bg-dark text-white text-center" name="QuoteEntry" id="QuoteEntry{{forloop.counter0}}">{{form.Monto.value}}</div>
+					<!--<div class="p-3 mb-2 bg-dark text-white text-center" name="QuoteEntry" id="QuoteEntry{{forloop.counter0}}">{{form.Monto.value}}</div>-->
+					<div class="p-3 mb-2 bg-dark text-white text-center" name="QuoteEntry" id="QuoteEntry{{forloop.counter0}}"><input type="number" name="form-{{forloop.counter0}}-Prosp" value="{{form.Monto.value}}" min="0" max="100000" step="any" id="id_form-{{forloop.counter0}}-Prosp"></div>
 					<div class="card-body">	
-              		{{ form.as_p }}
-               		 </div>
+					{{ form.as_p }}
+					<button value="{{forloop.counter0}}" type="button" class="btn bnt-lg btn-block btn-outline-primary" id="update-{{forloop.counter0}}-button" onclick="UpdateQuote(this.id)">Update</button>
+					 </div>
                 	<small class="text-muted">9 mins</small>
               	</div>
 			</div>
@@ -30,13 +32,25 @@
 	</div>
 </div>
 <script type="text/javascript">
+function UpdateQuote(element_id){
+	gid=parseFloat(document.getElementById(element_id).value)
+    	QuoteVar=parseFloat(document.getElementById("id_form-"+gid+"-Prosp").value);
+    	MaxVal=parseFloat(document.getElementById("id_form-"+gid+"-Max_Value").value);
+	MinVal=parseFloat(document.getElementById("id_form-"+gid+"-Min_Value").value);
+    	Quote=QuoteVar/MinVal;
+    	Quote=Quote*MaxVal;
+    	Quote=Quote.toFixed(3);
+    	NewMonto=document.getElementById("id_form-"+gid+"-Monto");
+    	NewMonto.value=Quote;
+}
 function CalcQuote() {
     var elements=document.getElementsByName("QuoteEntry");
     var ellength=elements.length;
     var QuoteVar, MaxVal, MinVal, Quote;
     for(x=0; x<ellength; x++)
     {
-    	QuoteVar=parseFloat(elements[x].innerText);
+    	//QuoteVar=parseFloat(elements[x].innerText);
+    	QuoteVar=parseFloat(document.getElementById("id_form-"+x+"-Prosp").value);
     	MaxVal=parseFloat(document.getElementById("id_form-"+x+"-Max_Value").value);
     	MinVal=parseFloat(document.getElementById("id_form-"+x+"-Min_Value").value);
     	Quote=QuoteVar/MinVal;
