@@ -1,0 +1,39 @@
+{% extends 'bitsoScaner/base.html' %}
+{% block title %}
+    Bitso Option
+{% endblock %}
+{% block content %}
+<section class="jumbotron bg-info text-center">
+	<div class="container">
+		<H1>{{coin | upper}} Dashboard</H1>
+		<p class="lead">Escogamos la mejor moneda</p>
+	</div>
+</section>
+{% if not acc %}
+	<h1>Error procesing account</h1>
+{% else %}	
+{% if error %}
+<h1> Error procesing Data {{merror}}</h1>
+{% else %}
+<div class="cover-container d-flex h-100 p-3 mx-auto flex-column">
+	<main class="inner cover" role="main">
+	<div class="d-flex justify-content-center">
+		<h1>Calcula la mejor rentabilidad por moneda</h1>
+	</div>
+	<div class="d-flex justify-content-center">
+		<form action="{% url 'best'  acc%}" method="post">
+			{% csrf_token %}
+			{{form.as_p}}
+			<input class="btn btn-outline-secondary" type="submit" value="submit coin">
+		</form>
+	<div>
+	</main>
+</div>
+{% endif %}
+{% if bc %}
+<div class="d-flex justify-content-center">
+	<div class="p-3 mb-2 bg-success text-black"><h3>la mejor moneda es {{ bc }} con un valor de {{calcv}}<a href="{% url 'coindashboard' acc bc %}"> CLICK AQUI PARA IR </a></h3></div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
