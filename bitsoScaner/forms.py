@@ -16,5 +16,7 @@ class CoinCalc(forms.Form):
 	Min_Value=forms.FloatField(required=True, max_value=100_000_000, min_value=0)
 	Monto=forms.FloatField(required=True, max_value=100_000_000, min_value=0)
 
+class CoinReqCalc(forms.Form):
+    Value = forms.FloatField(required=True, max_value=100_000_000, min_value=1000, widget=forms.NumberInput(attrs={'class': 'form-control'}))
 
 CoinCalcFormSet=formset_factory(CoinCalc, min_num=1, extra=2, max_num=3)

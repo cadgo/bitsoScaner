@@ -119,13 +119,11 @@ class Scanner(object):
                 bookname=coin,
                 ask=ticker.ask,
                 bid=ticker.bid,
-                high=ticker.high,
                 last=ticker.last,
                 low=ticker.low,
-                datetime=ticker.created_at
-                )
+                datetime=ticker.created_at)
             tickerdatabase.save()
-            #lastvalue = ticker.bid
+                #lastvalue = ticker.bid
             lastvalue = ticker.last
             rr[coin]['one_coin_to_mxn']=lastvalue
             feepercent=getattr(self.BitsoAPI.fees(), book).fee_percent
@@ -246,7 +244,6 @@ class Scanner(object):
             SE deben hacer dos funciones ya que si la alarma de venta no se da se quedan colgadas las operaciones de venta una funcion toma lo de alarm pool y genera la cotizacion la otra funcion siempre esta viendo el estado de la operacion y la quita cuando ya no este en tiempo o si se vendio pues la removemos de la BD 
         una vez q se venda la operacion tenemos que ir nuevamente por el balance antes poner la operacion tenemos que ver que tengnamos balance de esa criptomoneda dispnibile, la op no puede pasar el balance
         """
-        dummyOID="zzzZZZZZZzzzzzZZZZ"
         lenOpSell=len(alarmpool["opsell"])
         lenOpBuy=len(alarmpool["opbuy"])
         if lenOpSell == 0 and lenOpBuy == 0: return False
@@ -254,14 +251,14 @@ class Scanner(object):
             for a in alarmpool['opsell']:
                 if a[0].AutoSell == True:
                     coin=a[0].DigitalCoin; book=coin+'_mxn';
-                    ipk=a[0].pk; major=a[0].Balance; price=self.BitsoAPI.ticker(book).last
+                    ipk=a[0].pk; major=a[0].Balance; price=models.BitsoTicker.objects.filter(bookname=coin).latest('datetime').last
                     if price <= 0:
                         logging.error(f"No fue posible obtener el ultimo precio de la moneda {coin}, valor menor a 0")
                         break
                     #Tenemos que ir por el balance total a la BD para cumplir la ultima validacion de que no sea la op mayor al balance total
                     oid = models.SellQueueOp.objects.filter(OpSell__pk=ipk)
                     global_balance=models.BitsoBalance.objects.filter(BalanceCoin=coin).get().Balance
-                    if len(oid) == 0 and major < global_balance:
+                    if len(oid) == 0 and major <= global_balance:
                         #generamos OID por primera ves UNA VEZ GENERADA LA ORDEN MANDAR UN MAIL
                         logging.info(f"GENERANDO ORDEN: book {book}, side sell, oder_type limit, major {major}, price {price}")
                         ### TEST
@@ -274,14 +271,14 @@ class Scanner(object):
                         newqueue=models.SellQueueOp(OpSell=mod, Date=datetime.datetime.now(),OID=ret.get('oid'),OpCount=0)
                         newqueue.save()
                         logging.info("Debemos Generar un OID para el PK %d", ipk)
-                        #### TEST
-                    else:
-                        logging.info(f"No tenemos sufciente balance para la operacion Gbalance {global_balance}, major {major}")
+                    #### TEST
                 else:
-                    logging.debug(f"Autosell  apagado para {a[0].DigitalCoin} para la Op PK {a[0].pk} fecha {a[0].BuyDate} {a[0].BuyHour}")
-        #if lenOpBuy > 0:
-        #    for a in alarmpool['opbuy']:
-        #        print("Operacion de compra ", ipk)
+                    logging.info(f"No tenemos sufciente balance para la operacion Gbalance {global_balance}, major {major}")
+            else:
+                logging.debug(f"Autosell  apagado para {a[0].DigitalCoin} para la Op PK {a[0].pk} fecha {a[0].BuyDate} {a[0].BuyHour}")
+    #if lenOpBuy > 0:
+    #    for a in alarmpool['opbuy']:
+    #        print("Operacion de compra ", ipk)
         return True
 
     def OperationFollow(self):
@@ -296,15 +293,28 @@ class Scanner(object):
             una forma de validar en ves de raise de un error por keyvalue, es usar dict.get('oid') si da none es que no se genero
             
             PROBAR:
-            1 .- DOS OPERACIONES CON LA MISMA MONEDA ok 
-            2. DOS OPERACIONES CON DIF MONEDA ok
-            3 REMOVER EN MEDIO DE DEL PROCESO EN BITSO EL OID ok
-            4 PONER UN OID QUE NO EXISTE ok
-            5 PONER DOS OPERACIONES DE LA MISMA MONEDA Y REMOVER 1 ok
+            1 PONER SOLO UNA OPERACION
+            1.1 VENDERLA EN MEDIO DEL PROCESO ok
+            1.2 DEJAR QUE MUERA ok
+            2 .- DOS OPERACIONES CON LA MISMA MONEDA ok 
+            2.1 VENDERLA EN MEDIO DEL PROCESO ok
+            2.2 DEJAR QUE MUERA ok
+            3. DOS OPERACIONES CON DIF MONEDA 
+            4 REMOVER EN MEDIO DE DEL PROCESO EN BITSO EL OID  ok
+            5 PONER UN OID QUE NO EXISTE ok
+            6 PONER DOS OPERACIONES DE LA MISMA MONEDA Y REMOVER 1 ok
+
+               if opsi.OpSell.SendMail or opsi.OpSell.SlackHook:
+               message=f"Posible Operacion de Venta {opsi.OpSell.DigitalCoin} OID {opsi.OID}"
+               if opsi.OpSell.SendMail:
+               self.SendMailWrapper(mesage, "AutoSell")
+               if opsi.OpSell.SlackHook:
+               self.SendSlackMessage(message,"AutoSell")
         """
         sellpendings=[]
         operations=models.SellQueueOp.objects.filter()
         BitConfigCount=models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=self.AccMail).get().OperationCount 
+        #Para gragar la OP de venta cambiar el estado del if a != 0 para generar y optimizar el codigo
         if len(operations) == 0:
             logging.info("No hay operaciones a dar seguimiento encoladas")
             return False
@@ -332,17 +342,28 @@ class Scanner(object):
                    oo=self.BitsoAPI.open_orders(book)
                    if len(oo) == 0:
                        #Borramos la operacion actaul
-                       logging.info(f"No hay operaciones en bitso que reflejen esta entrada {opsi.OpSell.DigitalCoin} Valor esperado {opsi.OpSell.ValorExpected} BORRANDO PK {opsi.pk}")
+                       try:
+                           lk = self.BitsoAPI.lookup_order([opsi.OID])
+                       except bt.errors.ApiError:
+                           lk=[]
+                       if len(lk) != 0:
+                           logging.info(f"Orden de venta procesada con Status {lk[0].status}")
+                       else:
+                           logging.info(f"No hay operaciones en bitso que reflejen esta entrada {opsi.OpSell.DigitalCoin} Valor esperado {opsi.OpSell.ValorExpected} BORRANDO PK {opsi.pk}")
                        opsi.OpSell.AutoSell=False
                        opsi.OpSell.save()
                        opsi.delete()
                        break
                    else:
-                       for pord in oo:
+                       for pord in oo: #CUANDO HAY MAS DE DOS OPERACIONES ENCOLADAS
                            if pord.oid == opsi.OID:
                                exist=exist+1
                    if exist ==0:
-                       logging.info(f"Eliminando el OID {opsi.OID} NO CONCUERDA CON REMOTO POSIBLE VENTA :)")
+                       lk = self.BitsoAPI.lookup_order([opsi.OID])
+                       if len(lk) != 0:
+                           logging.info(f"Orden de venta procesada con Status {lk[0].status}")
+                       else:
+                           logging.info(f"Eliminando el OID {opsi.OID} NO CONCUERDA CON REMOTO POSIBLE VENTA :)")
                        self.UpdateBitsoBalande()
                        opsi.OpSell.AutoSell=False
                        opsi.OpSell.save()

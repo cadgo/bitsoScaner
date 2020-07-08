@@ -5,7 +5,7 @@ from django import forms
 
 @admin.register(OperationSellTo)
 class AdminOperationSell(admin.ModelAdmin):
-    list_display = ('BuyDate','BuyHour','DigitalCoin', 'Balance', 'ValorCompra','ValorExpected', 'Description')
+    list_display = ('BuyDate','BuyHour','DigitalCoin', 'Balance', 'ValorCompra','ValorExpected', 'Description','AutoSell')
     fieldsets=(
         (None,{'fields': ('Account',)}),
         ('Operation Time', {'fields': ('BuyDate', 'BuyHour')}),
