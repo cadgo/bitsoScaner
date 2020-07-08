@@ -119,6 +119,7 @@ class Scanner(object):
                 bookname=coin,
                 ask=ticker.ask,
                 bid=ticker.bid,
+                high=ticker.high,
                 last=ticker.last,
                 low=ticker.low,
                 datetime=ticker.created_at)
