@@ -122,9 +122,10 @@ class Scanner(object):
                 high=ticker.high,
                 last=ticker.last,
                 low=ticker.low,
-                datetime=ticker.created_at)
+                datetime=ticker.created_at
+                )
             tickerdatabase.save()
-                #lastvalue = ticker.bid
+            #lastvalue = ticker.bid
             lastvalue = ticker.last
             rr[coin]['one_coin_to_mxn']=lastvalue
             feepercent=getattr(self.BitsoAPI.fees(), book).fee_percent
@@ -272,14 +273,14 @@ class Scanner(object):
                         newqueue=models.SellQueueOp(OpSell=mod, Date=datetime.datetime.now(),OID=ret.get('oid'),OpCount=0)
                         newqueue.save()
                         logging.info("Debemos Generar un OID para el PK %d", ipk)
-                    #### TEST
+                        #### TEST
+                    else:
+                        logging.info(f"No tenemos sufciente balance para la operacion Gbalance {global_balance}, major {major}")
                 else:
-                    logging.info(f"No tenemos sufciente balance para la operacion Gbalance {global_balance}, major {major}")
-            else:
-                logging.debug(f"Autosell  apagado para {a[0].DigitalCoin} para la Op PK {a[0].pk} fecha {a[0].BuyDate} {a[0].BuyHour}")
-    #if lenOpBuy > 0:
-    #    for a in alarmpool['opbuy']:
-    #        print("Operacion de compra ", ipk)
+                    logging.debug(f"Autosell  apagado para {a[0].DigitalCoin} para la Op PK {a[0].pk} fecha {a[0].BuyDate} {a[0].BuyHour}")
+        #if lenOpBuy > 0:
+        #    for a in alarmpool['opbuy']:
+        #        print("Operacion de compra ", ipk)
         return True
 
     def OperationFollow(self):
