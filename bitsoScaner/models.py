@@ -15,6 +15,12 @@ class OperationAction(models.Model):
     AutoSell=models.BooleanField(default=False)
 
 class BitsoAcount(models.Model):
+    """
+        contiene los datos de la cuenta como
+        bitsmail: Correo electronico
+        bitsokey: llave
+        bitsosecret: contrasena bitso
+    """
     #BistoBalanceID = models.ForeignKey(BitsoBalance, on_delete=models.CASCADE)
     bitsomail = models.EmailField(max_length=100)
     bitsokey = models.CharField(max_length=30)
