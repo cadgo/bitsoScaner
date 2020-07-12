@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import django, os, time
+from plugins import sc_plugins
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
 from django.core.exceptions import ObjectDoesNotExist
 from bitsoScaner import models
 import sys, logging, threading
-import bitso
+import bitso, threading
 
 class Scanner():
     """
@@ -68,34 +69,7 @@ class Scanner():
             coins.append(x[0])
         return coins
 
-
-class plugin():
-    """
-        clase que nos ayudara con el tema del multithread, todo lo que herede de aqui debe trabanar como un plug in independiente corriendo como hilo
-        y solo realizando ciertas tareas muy especificas
-
-        plugin de logs
-        plugin de alarmas
-        plugin de ventas
-        plugin de compras
-    """
-    plist = [] 
-    __Initialized=False
-    def __init__(self, **kwargs):
-        self.PluginName = type(self).__name__ 
-        self.PlugIndescription = kwargs.get('desc')
-        self._dfl_params = {}   
-        
-        
-    def PluginInitialize(self):
-        if not self.__Initialized:
-            raise RuntimeError("Plugin not initialized")
-        plist.append(self)
-
-    def __str__(self):
-        return f"{self.PluginName}: Pluin Class Handler"
-
-class BalanceUpdater(plugin, threading.Thread):
+class BalanceUpdater(sc_plugins.plugin, threading.Thread):
     """
         BalanceUpdater, Demonio que corre en el background y cada cierto tiempo actualiza la base de datos del Balance
         PluginDescription: Plugin que corre en background y actualiza en la BD de datos los balances
@@ -130,8 +104,9 @@ if __name__ == '__main__':
     else:
         Sc.api = ca
     coins = Sc.SupportedCoins()
-    thread_Balance = BalanceUpdater(api=ca)
-    thread_Balance.run(coins)
+    thread_Balance = sc_plugins.BalanceUpdater(api=ca)
+    thread_Balance.SupportedCoins = coins
+    thread_Balance.start()
     while True:
        time.sleep(30)
     
