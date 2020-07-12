@@ -69,27 +69,6 @@ class Scanner():
             coins.append(x[0])
         return coins
 
-class BalanceUpdater(sc_plugins.plugin, threading.Thread):
-    """
-        BalanceUpdater, Demonio que corre en el background y cada cierto tiempo actualiza la base de datos del Balance
-        PluginDescription: Plugin que corre en background y actualiza en la BD de datos los balances
-    """
-    def __init__(self, **kwargs):
-        self.BitConn= kwargs.get('api')
-        self.__Initialized=True
-        super().__init__(**kwargs)
-
-    def __str__(self):
-        return f"{self.PluginName}: {self.PlugIndescription}"
-
-    def run(self, coins):
-        """
-            Corre como demonio actaulizando los balances en la BalanceDeamon
-        """
-        while True:
-            bal = self.BitConn.balances()
-            print(bal)
-            time.sleep(30)
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
