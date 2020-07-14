@@ -6,7 +6,7 @@ django.setup()
 from django.core.exceptions import ObjectDoesNotExist
 from bitsoScaner import models
 import sys, logging, threading
-import bitso, threading
+import bitso, threading, queue
 
 class Scanner():
     """
@@ -57,18 +57,56 @@ class Scanner():
             return False
         return cc
 
-    def SupportedCoins(self):
+    def SupportedBalances(self):
         """
             Rertun the list of supported coins or None si esta vacia
         """
         coins = []
-        supCoins = models.OperationBuy.SupportedCoins
+        supCoins = models.BitsoBalance.SupportedBalances
         if len(supCoins) == 0:
             raise ValueError('There is not supported coins to continue')
         for x in supCoins:
             coins.append(x[0])
         return coins
 
+    def GetAllBalances(self, coin_list):
+        thread_loop = []
+        QueueBalance=queue.Queue()
+        for cc in coin_list:
+            tr = sc_plugins.BalanceUpdater(api=self.api, desc=f"Balance para {cc}")
+            thread_loop.append(tr)
+            tr.PluginInitialize(cc, QueueBalance)
+            tr.start()
+        for cc in thread_loop:
+            cc.join()
+        if len(coin_list) != QueueBalance.qsize():
+            raise AttributeError('La longitud de la lista de monedas {} difiere de las obtenidas del servidor'.format(len(coin_list)))
+        return QueueBalance
+    
+    def InsertBalanceDB(self, coin, total):
+        """
+            actualiza la bd de datos de balance
+            Si existe la moneda la actualizamos
+            Si no existe la creamos
+
+            return True si todo esta bien si no regresomos False
+        """
+        balanceNotFound=0
+        if not coin in self.SupportedBalances():
+            logging.error("La moneda %s no concuerda con los balances soportados", coin)
+            return False
+        try:
+            balance_base = models.BitsoBalance.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).get(BalanceCoin=coin)
+        except models.BitsoBalance.DoesNotExist:
+            logging.warning("La moneda %s no existe en la BD", coin)
+            balanceNotFound=balanceNotFound+1
+        if balanceNotFound < 1:
+            #Si existe solo lo actualizamos
+            print("si existe")
+        else:
+            #Si no existe lo creamos en la BD
+            print("No existe")
+        
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
@@ -82,10 +120,10 @@ if __name__ == '__main__':
         logging.error("No fue posible loggearse a bitso con las credenciales")
     else:
         Sc.api = ca
-    coins = Sc.SupportedCoins()
-    thread_Balance = sc_plugins.BalanceUpdater(api=ca)
-    thread_Balance.SupportedCoins = coins
-    thread_Balance.start()
-    while True:
-       time.sleep(30)
+    balances = Sc.SupportedBalances()
+    queue_balance= Sc.GetAllBalances(balances)
+    for xx in balances:
+        print(queue_balance.get())
+    Sc.InsertBalanceDB('btc', 1122)
+
     
