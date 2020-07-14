@@ -77,7 +77,7 @@ WSGI_APPLICATION = 'djangobitso.wsgi.application'
 DATABASES = {
      'default': {
         'ENGINE': 'djongo',
-        'NAME': 'bitsoscaner',
+        'NAME': 'bitsoscaner-dev',
         'ENFORCE_SCHEMA': False,
         'CLIENT': {
       		'host': 'mongodb+srv://dbuser:'+os.environ.get('DBPWD')+'@cluster0-5my8v.mongodb.net/test?retryWrites=true&w=majority',

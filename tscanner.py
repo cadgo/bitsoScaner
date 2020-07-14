@@ -4,8 +4,9 @@ from plugins import sc_plugins
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 from bitsoScaner import models
-import sys, logging, threading
+import sys, logging, threading 
 import bitso, threading, queue
 
 class Scanner():
@@ -69,7 +70,7 @@ class Scanner():
             coins.append(x[0])
         return coins
 
-    def GetAllBalances(self, coin_list):
+    def RunBalancePlugin(self, coin_list):
         thread_loop = []
         QueueBalance=queue.Queue()
         for cc in coin_list:
@@ -91,21 +92,24 @@ class Scanner():
 
             return True si todo esta bien si no regresomos False
         """
-        balanceNotFound=0
+        balanceNotFound=False
+        bitsoAccount = models.BitsoAcount.objects.get(bitsomail=self.bitsoMail)
         if not coin in self.SupportedBalances():
-            logging.error("La moneda %s no concuerda con los balances soportados", coin)
             return False
         try:
             balance_base = models.BitsoBalance.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).get(BalanceCoin=coin)
         except models.BitsoBalance.DoesNotExist:
-            logging.warning("La moneda %s no existe en la BD", coin)
-            balanceNotFound=balanceNotFound+1
-        if balanceNotFound < 1:
-            #Si existe solo lo actualizamos
-            print("si existe")
+            logging.debug("La moneda %s no existe en la BD", coin)
+            balanceNotFound=True
+        if balanceNotFound:
+            #logging.info("Salvando el balance de %s en la BD con un total de %.6f", coin, total)
+            s = models.BitsoBalance(BitsoAcount=bitsoAccount, BalanceUpdate=timezone.now(), BalanceCoin=coin, Balance=total)
+            s.save()
+            return "NewBalance"
         else:
-            #Si no existe lo creamos en la BD
-            print("No existe")
+            #logging.info("Actualizamos %s, con total %.6f", coin, total)
+            q = models.BitsoBalance.objects.filter(BalanceCoin=coin).update(BalanceUpdate=timezone.now(), Balance=total)
+            return "UpdateBalance"
         
 
 if __name__ == '__main__':
@@ -121,9 +125,9 @@ if __name__ == '__main__':
     else:
         Sc.api = ca
     balances = Sc.SupportedBalances()
-    queue_balance= Sc.GetAllBalances(balances)
+    queue_balance= Sc.RunBalancePlugin(balances)
     for xx in balances:
-        print(queue_balance.get())
-    Sc.InsertBalanceDB('btc', 1122)
-
+        dict_val = queue_balance.get()
+        popitem = dict_val.popitem()
+        Sc.InsertBalanceDB(popitem[0], popitem[1])
     
