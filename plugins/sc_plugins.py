@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import threading, time, queue  
+import bitso
 class plugin():
      """
          clase que nos ayudara con el tema del multithread, todo lo que herede de aqui debe trabanar como un plug in independiente corriendo como hilo
@@ -27,6 +28,8 @@ class plugin():
 class BitsoApiPlugin(plugin):
     def __init__(self, **kwargs):
         self.BitConn = kwargs.get('api')
+        if not isinstance(self.BitConn, bitso.Api):
+            raise ValueError('ap parameter is not a bitsoApi instance')
         self.ComQueue=None
         super().__init__(**kwargs)
  
@@ -60,7 +63,7 @@ class BalanceUpdater(BitsoApiPlugin, threading.Thread):
             raise ValueError("No hay monedas para inspeccionar")
         self._Initialized = True
         super().PluginInitialize()
-
+        return True
 
     def run(self):
         """

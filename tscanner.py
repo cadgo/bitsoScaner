@@ -105,11 +105,11 @@ class Scanner():
             #logging.info("Salvando el balance de %s en la BD con un total de %.6f", coin, total)
             s = models.BitsoBalance(BitsoAcount=bitsoAccount, BalanceUpdate=timezone.now(), BalanceCoin=coin, Balance=total)
             s.save()
-            return "NewBalance"
+            return total
         else:
             #logging.info("Actualizamos %s, con total %.6f", coin, total)
             q = models.BitsoBalance.objects.filter(BalanceCoin=coin).update(BalanceUpdate=timezone.now(), Balance=total)
-            return "UpdateBalance"
+            return  total
         
 
 if __name__ == '__main__':
@@ -118,7 +118,6 @@ if __name__ == '__main__':
         sys.exit()
     Sc=Scanner(sys.argv[1])
     key, password = Sc.GetBitsoKeyPass()
-    #print(f"key {key} pass {password}")
     ca = Sc.BitsoLogin(key, password)
     if not ca: 
         logging.error("No fue posible loggearse a bitso con las credenciales")
@@ -129,5 +128,9 @@ if __name__ == '__main__':
     for xx in balances:
         dict_val = queue_balance.get()
         popitem = dict_val.popitem()
-        Sc.InsertBalanceDB(popitem[0], popitem[1])
+        insert_result =Sc.InsertBalanceDB(popitem[0], popitem[1])
+        if insert_result is False:
+            logging.error("No se pudo insertar el balance de la moneda %s", popitem[0])
+        else:
+            logging.info("Salvando el balance de %s en la BD con un total de %.6f", popitem[0], insert_result)
     
