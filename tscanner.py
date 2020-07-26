@@ -110,7 +110,79 @@ class Scanner():
             #logging.info("Actualizamos %s, con total %.6f", coin, total)
             q = models.BitsoBalance.objects.filter(BalanceCoin=coin).update(BalanceUpdate=timezone.now(), Balance=total)
             return  total
+       
+    def balance_Operationlogging(self, balances):
+        if len(balances) <= 0:
+            logging.error("Balance_Operation: No hay balances")
+            return False
+        for xx in balances:
+            dict_val = queue_balance.get()
+            popitem = dict_val.popitem()
+            insert_result =Sc.InsertBalanceDB(popitem[0], popitem[1])
+            if insert_result is False:
+                logging.error("No se pudo insertar el balance de la moneda %s", popitem[0])
+            else:
+                logging.info("Salvando el balance de %s en la BD con un total de %.6f", popitem[0], insert_result)
+    
+    def OperationSellItter(self):
+        models_sell = models.OperationSellTo.objects.filter(Account__bitsomail=self.bitsoMail)
+        if len(models_sell) == 0:
+            yield False
+        for mds in models_sell:
+            yield mds
+    
+    def LoggingSeparator(self, message, prf='='):
+        pads = prf*15
+        logging.info("%s [%s] %s", pads, message, pads)
+
+    def LoggingStandartOps(self, exc_sell_ops, exc_buy_ops):
+        """
+            cuando una operacion no cae en venta o compra se loggea en esta sección
+        """
+        if not isinstance(exc_sell_ops, list) or not isinstance(exc_sell_ops, list):
+            return False
+        standard_ops_sell=models.OperationSellTo.objects.exclude(pk__in=exc_sell_ops)
+        standard_ops_buy=models.OperationBuy.objects.exclude(pk__in=exc_buy_ops)
+        self.LoggingSeparator("OPERACIONES")
+        for sos in standard_ops_sell:
+            message = f"{sos.DigitalCoin} {sos.Balance} [Adquirido {sos.ValorCompra}]"
+            logging.info("%s",message)
         
+
+    def LoggingSellOps(self, Queue_sell):
+        """
+            cuando una operacion es de venta se loggea aqui
+        """
+        pass
+
+    def LoggingBuyOps(self, Queue_buy):
+        """
+            cuando un operacion de compra es procesada se loggea aqui
+        """
+        pass
+
+    def ListOfValidSellOperations(self):
+        valid_operations = queue.Queue()
+        no_sell_operations = queue.Queue()
+        threads = []
+        for e_op in self.OperationSellItter():
+            if e_op is False:
+                return False
+            t=sc_plugins.PluginQuoteStandardandSell(api=Sc.api, pk=e_op.pk, balance=e_op.Balance, value_expected=e_op.ValorExpected, digital_coin=e_op.DigitalCoin)
+            t.PluginInitialize(valid_operations, no_sell_operations)
+            threads.append(t)
+            t.start()
+        for tjoin in threads: tjoin.join()
+        return valid_operations
+    
+    def ListofOperations(self, queue):
+        queue_size = queue.qsize()
+        list_queue = []
+        if queue_size < 0:
+            return False
+        for i in range(queue.qsize()):
+            list_queue.append(queue.get())
+        return list_queue
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
@@ -125,12 +197,7 @@ if __name__ == '__main__':
         Sc.api = ca
     balances = Sc.SupportedBalances()
     queue_balance= Sc.RunBalancePlugin(balances)
-    for xx in balances:
-        dict_val = queue_balance.get()
-        popitem = dict_val.popitem()
-        insert_result =Sc.InsertBalanceDB(popitem[0], popitem[1])
-        if insert_result is False:
-            logging.error("No se pudo insertar el balance de la moneda %s", popitem[0])
-        else:
-            logging.info("Salvando el balance de %s en la BD con un total de %.6f", popitem[0], insert_result)
-    
+    Sc.balance_Operationlogging(balances)
+    queue_sell_op_id = Sc.ListOfValidSellOperations()
+    list_ops_sells=Sc.ListofOperations(queue_sell_op_id)
+    Sc.LoggingStandartOps(list_ops_sells, [])
