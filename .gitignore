@@ -3,3 +3,4 @@ djangobitso/__pycache__/
 bitsoScaner/__pycache__/
 bitsoScaner/migrations/__pycache__/
 bitso.log
+test/__pycache__

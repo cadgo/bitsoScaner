@@ -26,6 +26,9 @@ class Scanner():
             logging.error("La cuenta provista no existe %s", mail)
             sys.exit()
 
+    def GetConfigScanerRefresh(self):
+        a=models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).first()
+        return int(a.bitsoScanerRefresh)
 
     def _isValidaAccount(self,mail):
         """
@@ -124,7 +127,7 @@ class Scanner():
             else:
                 logging.info("Salvando el balance de %s en la BD con un total de %.6f", popitem[0], insert_result)
     
-    def OperationSellItter(self):
+    def OperationSellToItter(self):
         models_sell = models.OperationSellTo.objects.filter(Account__bitsomail=self.bitsoMail)
         if len(models_sell) == 0:
             yield False
@@ -135,37 +138,29 @@ class Scanner():
         pads = prf*15
         logging.info("%s [%s] %s", pads, message, pads)
 
-    def LoggingStandartOps(self, exc_sell_ops, exc_buy_ops):
+    def LoggingOps(self,  ops, desc_limit_v=8):
         """
             cuando una operacion no cae en venta o compra se loggea en esta sección
         """
-        if not isinstance(exc_sell_ops, list) or not isinstance(exc_sell_ops, list):
+        desc_limit=desc_limit_v
+        if not isinstance(ops, dict): 
             return False
-        standard_ops_sell=models.OperationSellTo.objects.exclude(pk__in=exc_sell_ops)
-        standard_ops_buy=models.OperationBuy.objects.exclude(pk__in=exc_buy_ops)
-        self.LoggingSeparator("OPERACIONES")
-        for sos in standard_ops_sell:
-            message = f"{sos.DigitalCoin} {sos.Balance} [Adquirido {sos.ValorCompra}]"
-            logging.info("%s",message)
-        
+        loginfo = models.OperationSellTo.objects.get(pk=ops['pk']) 
+        coin=loginfo.DigitalCoin; balance=loginfo.Balance
+        adquirido=loginfo.ValorCompra; Cotizado=ops['quoted_value']
+        esperado=loginfo.ValorExpected; descripcion=loginfo.Description
+        mail=loginfo.SendMail; Slack=loginfo.SlackHook; autosell=loginfo.AutoSell
+        if len(descripcion) > desc_limit:
+            descripcion=descripcion[:8] + '...'
+        message = f"{coin} = {balance} - [Cot x {Cotizado}] - [Esperado x {esperado}] == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        logging.info(message)
 
-    def LoggingSellOps(self, Queue_sell):
-        """
-            cuando una operacion es de venta se loggea aqui
-        """
-        pass
-
-    def LoggingBuyOps(self, Queue_buy):
-        """
-            cuando un operacion de compra es procesada se loggea aqui
-        """
-        pass
 
     def ListOfValidSellOperations(self):
         valid_operations = queue.Queue()
         no_sell_operations = queue.Queue()
         threads = []
-        for e_op in self.OperationSellItter():
+        for e_op in self.OperationSellToItter():
             if e_op is False:
                 return False
             t=sc_plugins.PluginQuoteStandardandSell(api=Sc.api, pk=e_op.pk, balance=e_op.Balance, value_expected=e_op.ValorExpected, digital_coin=e_op.DigitalCoin)
@@ -173,9 +168,10 @@ class Scanner():
             threads.append(t)
             t.start()
         for tjoin in threads: tjoin.join()
-        return valid_operations
-    
-    def ListofOperations(self, queue):
+        return valid_operations, no_sell_operations
+
+    #Si no se usa Borrar 
+    def OperationQueueToList(self, queue):
         queue_size = queue.qsize()
         list_queue = []
         if queue_size < 0:
@@ -184,6 +180,7 @@ class Scanner():
             list_queue.append(queue.get())
         return list_queue
 
+running=True
 if __name__ == '__main__':
     if len(sys.argv) < 1:
         print("Se requiere una cuenta valida para continuar")
@@ -198,6 +195,20 @@ if __name__ == '__main__':
     balances = Sc.SupportedBalances()
     queue_balance= Sc.RunBalancePlugin(balances)
     Sc.balance_Operationlogging(balances)
-    queue_sell_op_id = Sc.ListOfValidSellOperations()
-    list_ops_sells=Sc.ListofOperations(queue_sell_op_id)
-    Sc.LoggingStandartOps(list_ops_sells, [])
+    while running:
+        try:
+            queue_sell_op_id, queue_no_sell_op_id = Sc.ListOfValidSellOperations()
+            list_ops_sells=Sc.OperationQueueToList(queue_sell_op_id)
+            list_ops_no_sell=Sc.OperationQueueToList(queue_no_sell_op_id)
+            Sc.LoggingSeparator("OPERACIONES")
+            print(f"Opsell {list_ops_sells} NoOpsell {list_ops_no_sell}")
+            for nosellops in list_ops_no_sell:
+                Sc.LoggingOps(nosellops)
+            Sc.LoggingSeparator("VENTAS")
+            for sells in list_ops_sells:
+                Sc.LoggingOps(sells)
+            #Sc.LoggingOps('OPERACIONES', [a for a in list_ops_no_sell])
+            time.sleep(Sc.GetConfigScanerRefresh())
+        except KeyboardInterrupt:
+            print("Saliendo de la aplicación")
+            running=False

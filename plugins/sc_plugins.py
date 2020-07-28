@@ -107,6 +107,7 @@ class PluginQuoteStandardandSell(BitsoApiPlugin, threading.Thread):
         return True
 
     def run(self):
+        retdic = {'pk':None, 'quoted_value':None}
         book = self.DigitalCoin+'_mxn'
         decimal.getcontext().prec=8
         balance=decimal.Decimal(self.Balance)
@@ -115,8 +116,9 @@ class PluginQuoteStandardandSell(BitsoApiPlugin, threading.Thread):
         fees = getattr(bitso_fees,book).fee_percent / 100        
         #price = balance - getattr(bitso_fees.withdrawal_fees, self.DigitalCoin)
         price = (balance * ticker.last) - fees 
-        print(f"Monda {self.DigitalCoin} price {price}, valor {self.ValueExpected}")
         if price >= self.ValueExpected:
-            self.queue_valid_sell_pks.put(self.pk)
+            retdic['pk']= self.pk; retdic['quoted_value']=price
+            self.queue_valid_sell_pks.put(retdic)
         else:
-            self.queue_no_sell_pks.put(self.pk)
+            retdic['pk']= self.pk; retdic['quoted_value']=price
+            self.queue_no_sell_pks.put(retdic)
