@@ -132,8 +132,15 @@ class Scanner():
         if len(models_sell) == 0:
             yield False
         for mds in models_sell:
-            yield mds
-    
+             yield mds
+   
+   
+    def OperationBuyToItter(self):
+        models_buy = models.OperationBuy.objects.filter(Account__bitsomail=self.bitsoMail)
+        if len(models_buy) == 0:
+            yield False
+        for mds in models_buy:
+             yield mds
     def LoggingSeparator(self, message, prf='='):
         pads = prf*15
         logging.info("%s [%s] %s", pads, message, pads)
@@ -162,13 +169,26 @@ class Scanner():
         threads = []
         for e_op in self.OperationSellToItter():
             if e_op is False:
-                return False
+                return False, False
             t=sc_plugins.PluginQuoteStandardandSell(api=Sc.api, pk=e_op.pk, balance=e_op.Balance, value_expected=e_op.ValorExpected, digital_coin=e_op.DigitalCoin)
             t.PluginInitialize(valid_operations, no_sell_operations)
             threads.append(t)
             t.start()
         for tjoin in threads: tjoin.join()
         return valid_operations, no_sell_operations
+
+    def ListOfValidBuyOperations(self):
+        valid_sell_operations = queue.Queue()
+        threads= []
+        for e_op in self.OperationBuyToItter():
+            if e_op is False:
+                return False, False
+            t = sc_plugins.PluginQuoteBuy(api=Sc.api, pk=e_op.pk, value_expected=e_op.ValorExpected,digital_coin = e_op.DigitalCoin)
+            t.PluginInitialize(valid_sell_operations)
+            threads.append(t)
+            t.start()
+        for tjoin in threads: tjoin.join()
+        return valid_sell_operations
 
     #Si no se usa Borrar 
     def OperationQueueToList(self, queue):
@@ -198,17 +218,27 @@ if __name__ == '__main__':
     while running:
         try:
             queue_sell_op_id, queue_no_sell_op_id = Sc.ListOfValidSellOperations()
+            queue_buy_op_id =Sc.ListOfValidBuyOperations()
+            if queue_sell_op_id == False and queue_no_sell_op_id == False: 
+                raise ValueError("No hay operaciones Validas a procesar")
             list_ops_sells=Sc.OperationQueueToList(queue_sell_op_id)
             list_ops_no_sell=Sc.OperationQueueToList(queue_no_sell_op_id)
             Sc.LoggingSeparator("OPERACIONES")
-            print(f"Opsell {list_ops_sells} NoOpsell {list_ops_no_sell}")
+            #print(f"Opsell {list_ops_sells} NoOpsell {list_ops_no_sell}")
             for nosellops in list_ops_no_sell:
                 Sc.LoggingOps(nosellops)
             Sc.LoggingSeparator("VENTAS")
             for sells in list_ops_sells:
                 Sc.LoggingOps(sells)
-            #Sc.LoggingOps('OPERACIONES', [a for a in list_ops_no_sell])
+            if queue_buy_op_id.qsize() > 0:
+                Sc.LoggingSeparator("COMPRAR")
+                lists_ops_buy = Sc.OperationQueueToList(queue_buy_op_id)
+                for buy in lists_ops_buy:
+                    Sc.LoggingOps(buy)
             time.sleep(Sc.GetConfigScanerRefresh())
+        except ValueError as e:
+            logging.error("%s", e.message)
+            time.slee(Sc.GetConfigScanerRefresh())
         except KeyboardInterrupt:
             print("Saliendo de la aplicación")
             running=False

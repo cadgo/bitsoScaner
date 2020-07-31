@@ -122,3 +122,38 @@ class PluginQuoteStandardandSell(BitsoApiPlugin, threading.Thread):
         else:
             retdic['pk']= self.pk; retdic['quoted_value']=price
             self.queue_no_sell_pks.put(retdic)
+
+class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
+    """
+        Genera las cotizaciones para ver si la operacion de compra es posible o no
+        recibe el pk, el balancce, valor esperado
+        para saber si es necesario comprar
+    """
+    def  __init__(self, **kwargs):
+        self.pk = kwargs['pk'] if kwargs['pk'] > 0 else 1   
+        self.ValueExpected = kwargs['value_expected'] if kwargs['value_expected'] >0 else 0
+        if self.pk == 0 or self.ValueExpected==0:
+            raise ValueError('Error parsing one of the values')
+        self.DigitalCoin = kwargs['digital_coin']
+        if len(self.DigitalCoin) == 0:
+            raise ValueError("Digital Coin can't be empty")
+        self._Initialized = False
+        super().__init__(**kwargs)
+        threading.Thread.__init__(self)
+
+    def PluginInitialize(self, valid_buy_queue):
+        if isinstance(valid_buy_queue, queue.Queue):
+            self.queue_valid_buy_pks = valid_buy_queue
+        else:
+            raise ValueError("No hay un Queue Valido")
+        self._Initialized = True
+        super().PluginInitialize()
+        return True
+
+    def run(self):
+        retdic= {'pk':None, 'quoted_value':None}
+        book=self.DigitalCoin+'_mxn'
+        last_coin_value = decimal.Decimal(self.BitConn.ticker(book).last)
+        if self.ValueExpected  >= last_coin_value:
+            retdic['pk']= self.pk; retdic['quoted_value']=last_coin_value
+            self.queue_valid_buy_pks.put(retdic)
