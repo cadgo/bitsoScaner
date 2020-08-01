@@ -141,9 +141,10 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
         super().__init__(**kwargs)
         threading.Thread.__init__(self)
 
-    def PluginInitialize(self, valid_buy_queue):
-        if isinstance(valid_buy_queue, queue.Queue):
+    def PluginInitialize(self, valid_buy_queue, remaining_buy_queue):
+        if isinstance(valid_buy_queue, queue.Queue) or isinstance(remaining_buy_queue, queue.Queue):
             self.queue_valid_buy_pks = valid_buy_queue
+            self.queue_remaining_buy_pks = remaining_buy_queue
         else:
             raise ValueError("No hay un Queue Valido")
         self._Initialized = True
@@ -154,6 +155,8 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
         retdic= {'pk':None, 'quoted_value':None}
         book=self.DigitalCoin+'_mxn'
         last_coin_value = decimal.Decimal(self.BitConn.ticker(book).last)
+        retdic['pk']= self.pk; retdic['quoted_value']=last_coin_value
         if self.ValueExpected  >= last_coin_value:
-            retdic['pk']= self.pk; retdic['quoted_value']=last_coin_value
             self.queue_valid_buy_pks.put(retdic)
+        else:
+            self.queue_remaining_buy_pks.put(retdic)

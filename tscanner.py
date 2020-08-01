@@ -145,7 +145,7 @@ class Scanner():
         pads = prf*15
         logging.info("%s [%s] %s", pads, message, pads)
 
-    def LoggingOps(self,  ops, desc_limit_v=8):
+    def LoggingOps(self,  ops, desc_limit_v=15):
         """
             cuando una operacion no cae en venta o compra se loggea en esta sección
         """
@@ -158,10 +158,25 @@ class Scanner():
         esperado=loginfo.ValorExpected; descripcion=loginfo.Description
         mail=loginfo.SendMail; Slack=loginfo.SlackHook; autosell=loginfo.AutoSell
         if len(descripcion) > desc_limit:
-            descripcion=descripcion[:8] + '...'
+            descripcion=descripcion[:desc_limit_v] + '...'
         message = f"{coin} = {balance} - [Cot x {Cotizado}] - [Esperado x {esperado}] == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
         logging.info(message)
 
+    def LoggingOpsbuy(self,  ops, desc_limit_v=15):
+        """
+            cuando una operacion no cae en venta o compra se loggea en esta sección
+        """
+        desc_limit=desc_limit_v
+        if not isinstance(ops, dict): 
+            return False
+        loginfo = models.OperationBuy.objects.get(pk=ops['pk']) 
+        coin=loginfo.DigitalCoin; esperado=loginfo.ValorExpected 
+        Cotizado=ops['quoted_value']; descripcion=loginfo.Description
+        mail=loginfo.SendMail; Slack=loginfo.SlackHook; autosell=loginfo.AutoSell
+        if len(descripcion) > desc_limit:
+            descripcion=descripcion[:desc_limit_v] + '...'
+        message = f"{coin} Tiene un valor {Cotizado} esperamos {esperado} == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        logging.info(message)
 
     def ListOfValidSellOperations(self):
         valid_operations = queue.Queue()
@@ -178,17 +193,18 @@ class Scanner():
         return valid_operations, no_sell_operations
 
     def ListOfValidBuyOperations(self):
-        valid_sell_operations = queue.Queue()
+        valid_buy_operations = queue.Queue()
+        remaining_buy_ops = queue.Queue()
         threads= []
         for e_op in self.OperationBuyToItter():
             if e_op is False:
                 return False, False
             t = sc_plugins.PluginQuoteBuy(api=Sc.api, pk=e_op.pk, value_expected=e_op.ValorExpected,digital_coin = e_op.DigitalCoin)
-            t.PluginInitialize(valid_sell_operations)
+            t.PluginInitialize(valid_buy_operations, remaining_buy_ops)
             threads.append(t)
             t.start()
         for tjoin in threads: tjoin.join()
-        return valid_sell_operations
+        return valid_buy_operations, remaining_buy_ops
 
     #Si no se usa Borrar 
     def OperationQueueToList(self, queue):
@@ -218,23 +234,29 @@ if __name__ == '__main__':
     while running:
         try:
             queue_sell_op_id, queue_no_sell_op_id = Sc.ListOfValidSellOperations()
-            queue_buy_op_id =Sc.ListOfValidBuyOperations()
+            queue_buy_op_id, queue_reamining_buy_op =Sc.ListOfValidBuyOperations()
             if queue_sell_op_id == False and queue_no_sell_op_id == False: 
                 raise ValueError("No hay operaciones Validas a procesar")
-            list_ops_sells=Sc.OperationQueueToList(queue_sell_op_id)
-            list_ops_no_sell=Sc.OperationQueueToList(queue_no_sell_op_id)
-            Sc.LoggingSeparator("OPERACIONES")
-            #print(f"Opsell {list_ops_sells} NoOpsell {list_ops_no_sell}")
-            for nosellops in list_ops_no_sell:
-                Sc.LoggingOps(nosellops)
-            Sc.LoggingSeparator("VENTAS")
-            for sells in list_ops_sells:
-                Sc.LoggingOps(sells)
+            if queue_no_sell_op_id.qsize() > 0:
+                Sc.LoggingSeparator("OPERACIONES")
+                list_ops_no_sell=Sc.OperationQueueToList(queue_no_sell_op_id)
+                for nosellops in list_ops_no_sell:
+                    Sc.LoggingOps(nosellops)
+            if queue_reamining_buy_op.qsize() > 0:
+                Sc.LoggingSeparator("COMPRAS COTIZADAS")
+                lists_remainig_buy = Sc.OperationQueueToList(queue_reamining_buy_op)
+                for rem in lists_remainig_buy:
+                    Sc.LoggingOpsbuy(rem)
             if queue_buy_op_id.qsize() > 0:
                 Sc.LoggingSeparator("COMPRAR")
                 lists_ops_buy = Sc.OperationQueueToList(queue_buy_op_id)
                 for buy in lists_ops_buy:
-                    Sc.LoggingOps(buy)
+                    Sc.LoggingOpsbuy(buy)
+            if queue_sell_op_id.qsize() > 0:
+                Sc.LoggingSeparator("VENTAS")
+                list_ops_sells=Sc.OperationQueueToList(queue_sell_op_id)
+                for sells in list_ops_sells:
+                    Sc.LoggingOps(sells)
             time.sleep(Sc.GetConfigScanerRefresh())
         except ValueError as e:
             logging.error("%s", e.message)
