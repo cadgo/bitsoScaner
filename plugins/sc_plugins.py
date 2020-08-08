@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 import threading, time, queue  
 import bitso, decimal
+import sys, re
+sys.path.insert(1, '/home/carlos_diaz_s3c/python/cdtool')
+from SrvPost import slackWebHookPost
 class plugin():
          """
              clase que nos ayudara con el tema del multithread, todo lo que herede de aqui debe trabanar como un plug in independiente corriendo como hilo
              y solo realizando ciertas tareas muy especificas
      
-             plugin de logs
              plugin de alarmas
              plugin de ventas
              plugin de compras
@@ -130,7 +132,7 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
         para saber si es necesario comprar
     """
     def  __init__(self, **kwargs):
-        self.pk = kwargs['pk'] if kwargs['pk'] > 0 else 1   
+        self.pk = kwargs['pk'] if kwargs['pk'] > 0 else 0 
         self.ValueExpected = kwargs['value_expected'] if kwargs['value_expected'] >0 else 0
         if self.pk == 0 or self.ValueExpected==0:
             raise ValueError('Error parsing one of the values')
@@ -160,3 +162,33 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
             self.queue_valid_buy_pks.put(retdic)
         else:
             self.queue_remaining_buy_pks.put(retdic)
+class PluginAlarms(plugin):
+    def __init__(self, **kwargs):
+        self.message = ""
+        super().__init__(**kwargs)
+
+    def AppendMessage(self, amessage):
+        if len(amessage) > 0:
+            self.message = self.message+amessage
+            self.message = self.message+'\n'
+            return True
+        else:
+            False
+
+class PluginSlackAlarm(PluginAlarms):
+    def __init__(self, reference_program,  **kwargs):
+        self.ref_program = reference_program
+        super().__init__(**kwargs)
+    
+    def PluginInitialize(self, webhook):
+        hook_regex = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
+        if len(webhook) > 0 or re.match(hook_regex, webhook) != None:
+            self.webhook = webhook
+            self._Initialized = True
+        else: 
+            self._Initialized = False
+            raise ValueError("webhook parameter error")
+
+    def run(self):
+        prog_message = self.ref_program + '\n' + self.message
+        SlackWebHook(self.webhook,prog_message)

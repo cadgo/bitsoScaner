@@ -26,5 +26,26 @@ class TestPlugins(unittest.TestCase):
         #self.assertEqual(self.test1.PluginInitialize('btc', ''), ValueError)
         print(context.exception)
 
+
+class TestPlugins_QuoteBuy(unittest.TestCase):
+    
+    def test_plugin_init(self):
+        print("Prueba con pk 0 y value_expected 0")
+        with self.assertRaises(ValueError) as context:
+            sc_plugins.PluginQuoteBuy(api=bitso.Api(), value_expected=0,pk=0, digital_coin="")
+        print(context.exception)
+
+        #PK = 0
+        print("Prueba con solo pk en cero")
+        with self.assertRaises(ValueError) as context:
+            sc_plugins.PluginQuoteBuy(api=bitso.Api(), value_expected=0,pk=1,digital_coin="btc")
+        print(context.exception)
+        
+        #PK = 0
+        print("Prueba con solo value_expected en cero")
+        with self.assertRaises(ValueError) as context:
+            sc_plugins.PluginQuoteBuy(api=bitso.Api(), value_expected=1,pk=0,digital_coin="btc")
+        print(context.exception)
+
 if __name__ == "__main__":
     unittest.main()
