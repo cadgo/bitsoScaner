@@ -216,6 +216,48 @@ class Scanner():
             list_queue.append(queue.get())
         return list_queue
 
+    def OperationHandler(self):
+        """
+            procela el loggeo de las operaciones y devuelve un dic con 4 valores para su proceso futuro
+
+            list_ops_pending_sell: Entrega todas las operaciones que no caen en ventas de la tabla de opsell
+            lists_pending_buy: Entrega la lista de las operaciones que no son de venta
+            lists_ops_buy: Entrega la lista de las operaciones de venta que tenemos pendiente
+            list_ops_sells: Entrega la lista de operaciones de venta pendiente
+        """
+        optype= {'list_ops_pending_sell':'', 'lists_pending_buy':'',
+                'lists_ops_buy':'','list_ops_sells':''}
+        queue_sell_op_id, queue_no_sell_op_id = self.ListOfValidSellOperations()
+        queue_buy_op_id, queue_reamining_buy_op =self.ListOfValidBuyOperations()
+        if queue_sell_op_id == False and queue_no_sell_op_id == False: 
+             raise ValueError("No hay operaciones Validas a procesar")
+        if queue_no_sell_op_id.qsize() > 0:
+            self.LoggingSeparator("OPERACIONES")
+            list_ops_pending_sell=self.OperationQueueToList(queue_no_sell_op_id)
+            for nosellops in list_ops_pending_sell:
+                self.LoggingOps(nosellops)
+            optype['list_ops_pending_sell'] = list_ops_pending_sell
+        if queue_reamining_buy_op.qsize() > 0:
+            self.LoggingSeparator("COMPRAS COTIZADAS")
+            lists_pending_buy = self.OperationQueueToList(queue_reamining_buy_op)
+            for rem in lists_pending_buy:
+                self.LoggingOpsbuy(rem)
+            optype['lists_pending_buy']=lists_pending_buy 
+        if queue_buy_op_id.qsize() > 0:
+            self.LoggingSeparator("COMPRAR")
+            lists_ops_buy = self.OperationQueueToList(queue_buy_op_id)
+            for buy in lists_ops_buy:
+                self.LoggingOpsbuy(buy)
+            optype['lists_ops_buy ']=lists_ops_buy 
+        if queue_sell_op_id.qsize() > 0:
+            self.LoggingSeparator("VENTAS")
+            list_ops_sells=self.OperationQueueToList(queue_sell_op_id)
+            for sells in list_ops_sells:
+                self.LoggingOps(sells)
+            optype['list_ops_sells']=list_ops_sells
+        return optype
+
+
 running=True
 if __name__ == '__main__':
     if len(sys.argv) < 1:
@@ -233,30 +275,7 @@ if __name__ == '__main__':
     Sc.balance_Operationlogging(balances)
     while running:
         try:
-            queue_sell_op_id, queue_no_sell_op_id = Sc.ListOfValidSellOperations()
-            queue_buy_op_id, queue_reamining_buy_op =Sc.ListOfValidBuyOperations()
-            if queue_sell_op_id == False and queue_no_sell_op_id == False: 
-                raise ValueError("No hay operaciones Validas a procesar")
-            if queue_no_sell_op_id.qsize() > 0:
-                Sc.LoggingSeparator("OPERACIONES")
-                list_ops_no_sell=Sc.OperationQueueToList(queue_no_sell_op_id)
-                for nosellops in list_ops_no_sell:
-                    Sc.LoggingOps(nosellops)
-            if queue_reamining_buy_op.qsize() > 0:
-                Sc.LoggingSeparator("COMPRAS COTIZADAS")
-                lists_remainig_buy = Sc.OperationQueueToList(queue_reamining_buy_op)
-                for rem in lists_remainig_buy:
-                    Sc.LoggingOpsbuy(rem)
-            if queue_buy_op_id.qsize() > 0:
-                Sc.LoggingSeparator("COMPRAR")
-                lists_ops_buy = Sc.OperationQueueToList(queue_buy_op_id)
-                for buy in lists_ops_buy:
-                    Sc.LoggingOpsbuy(buy)
-            if queue_sell_op_id.qsize() > 0:
-                Sc.LoggingSeparator("VENTAS")
-                list_ops_sells=Sc.OperationQueueToList(queue_sell_op_id)
-                for sells in list_ops_sells:
-                    Sc.LoggingOps(sells)
+            dic_operations = Sc.OperationHandler()
             time.sleep(Sc.GetConfigScanerRefresh())
         except ValueError as e:
             logging.error("%s", e.message)
