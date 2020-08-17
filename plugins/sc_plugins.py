@@ -175,10 +175,11 @@ class PluginAlarms(plugin):
         else:
             False
 
-class PluginSlackAlarm(PluginAlarms):
-    def __init__(self, reference_program,  **kwargs):
-        self.ref_program = reference_program
+class PluginSlackAlarm(PluginAlarms, threading.Thread):
+    def __init__(self, reference_data="",  **kwargs):
+        self.reference = reference_data
         super().__init__(**kwargs)
+        threading.Thread.__init__(self)
     
     def PluginInitialize(self, webhook):
         hook_regex = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
@@ -190,5 +191,5 @@ class PluginSlackAlarm(PluginAlarms):
             raise ValueError("webhook parameter error")
 
     def run(self):
-        prog_message = self.ref_program + '\n' + self.message
-        SlackWebHook(self.webhook,prog_message)
+        prog_message = self.reference + '\n' + self.message
+        slackWebHookPost(self.webhook, prog_message)

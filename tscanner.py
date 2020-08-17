@@ -16,7 +16,7 @@ class Scanner():
 
         mail - mail de la cuenta de bitso
     """
-    version="xxx"
+    version="bitsoScaner ver 1"
     description = "xxx"
     def __init__(self,mail, logfile="bitso.log"):
         self.api=None
@@ -145,6 +145,19 @@ class Scanner():
         pads = prf*15
         logging.info("%s [%s] %s", pads, message, pads)
 
+    def __MessageLogGen(self, OP="sell", *args):
+        """
+            Entrega el mensaje a ser loggeado o enviando por algun plugin
+            OP= Tipo de operacion "venta" o "compra" 
+            args: como se debe acomodar la info
+        """
+        if OP == "sell":
+            return f"{args[0]} = {args[1]} - [Cot x {args[2]}] - [Esperado x {args[3]}] == Descripcion {args[4]} | Flags: Mail {args[5]} Slack {args[6]} AS {args[7]}"
+        elif OP == "buy":
+            return f"{args[0]} Tiene un valor {args[1]} esperamos {args[2]} == Descripcion {args[3]} | Flags: Mail {args[4]} Slack {args[5]} AS {args[6]}"
+        elif OP == "buy_alarm":
+            return f"{args[0]} Tiene un valor [{args[1]}] esperamos [{args[2]}] Descripcion [{args[3]}]"
+
     def LoggingOps(self,  ops, desc_limit_v=15):
         """
             cuando una operacion no cae en venta o compra se loggea en esta sección
@@ -159,7 +172,8 @@ class Scanner():
         mail=loginfo.SendMail; Slack=loginfo.SlackHook; autosell=loginfo.AutoSell
         if len(descripcion) > desc_limit:
             descripcion=descripcion[:desc_limit_v] + '...'
-        message = f"{coin} = {balance} - [Cot x {Cotizado}] - [Esperado x {esperado}] == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        #message = f"{coin} = {balance} - [Cot x {Cotizado}] - [Esperado x {esperado}] == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        message = self.__MessageLogGen("sell", coin, balance, Cotizado, esperado, descripcion, mail, Slack, autosell)
         logging.info(message)
 
     def LoggingOpsbuy(self,  ops, desc_limit_v=15):
@@ -175,7 +189,8 @@ class Scanner():
         mail=loginfo.SendMail; Slack=loginfo.SlackHook; autosell=loginfo.AutoSell
         if len(descripcion) > desc_limit:
             descripcion=descripcion[:desc_limit_v] + '...'
-        message = f"{coin} Tiene un valor {Cotizado} esperamos {esperado} == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        #message = f"{coin} Tiene un valor {Cotizado} esperamos {esperado} == Descripcion {descripcion} | Flags: Mail {mail} Slack {Slack} AS {autosell}"
+        message = self.__MessageLogGen("buy", coin, Cotizado, esperado, descripcion, mail, Slack, autosell)
         logging.info(message)
 
     def ListOfValidSellOperations(self):
@@ -220,13 +235,10 @@ class Scanner():
         """
             procela el loggeo de las operaciones y devuelve un dic con 4 valores para su proceso futuro
 
-            list_ops_pending_sell: Entrega todas las operaciones que no caen en ventas de la tabla de opsell
-            lists_pending_buy: Entrega la lista de las operaciones que no son de venta
-            lists_ops_buy: Entrega la lista de las operaciones de venta que tenemos pendiente
-            list_ops_sells: Entrega la lista de operaciones de venta pendiente
+            lists_ops_buy: Entrega la lista de las operaciones de venta que tenemos pendiente o None si no hay nada que procesar
+            list_ops_sells: Entrega la lista de operaciones de venta pendiente None si no hay nada que procesar
         """
-        optype= {'list_ops_pending_sell':'', 'lists_pending_buy':'',
-                'lists_ops_buy':'','list_ops_sells':''}
+        lists_ops_buy = None; lists_ops_sells=None
         queue_sell_op_id, queue_no_sell_op_id = self.ListOfValidSellOperations()
         queue_buy_op_id, queue_reamining_buy_op =self.ListOfValidBuyOperations()
         if queue_sell_op_id == False and queue_no_sell_op_id == False: 
@@ -236,27 +248,57 @@ class Scanner():
             list_ops_pending_sell=self.OperationQueueToList(queue_no_sell_op_id)
             for nosellops in list_ops_pending_sell:
                 self.LoggingOps(nosellops)
-            optype['list_ops_pending_sell'] = list_ops_pending_sell
         if queue_reamining_buy_op.qsize() > 0:
             self.LoggingSeparator("COMPRAS COTIZADAS")
             lists_pending_buy = self.OperationQueueToList(queue_reamining_buy_op)
             for rem in lists_pending_buy:
                 self.LoggingOpsbuy(rem)
-            optype['lists_pending_buy']=lists_pending_buy 
         if queue_buy_op_id.qsize() > 0:
             self.LoggingSeparator("COMPRAR")
             lists_ops_buy = self.OperationQueueToList(queue_buy_op_id)
             for buy in lists_ops_buy:
                 self.LoggingOpsbuy(buy)
-            optype['lists_ops_buy ']=lists_ops_buy 
         if queue_sell_op_id.qsize() > 0:
             self.LoggingSeparator("VENTAS")
-            list_ops_sells=self.OperationQueueToList(queue_sell_op_id)
-            for sells in list_ops_sells:
+            lists_ops_sells=self.OperationQueueToList(queue_sell_op_id)
+            for sells in lists_ops_sells:
                 self.LoggingOps(sells)
-            optype['list_ops_sells']=list_ops_sells
-        return optype
+        return lists_ops_buy, lists_ops_sells 
+    
+    def AlarmBuy(self,_pk):
+        alarm_status=models.OperationBuy.objects.get(pk=_pk)
+        return alarm_status.SlackHook, alarm_status.SendMail
+    
+    def AlarmSell(self,_pk):
+        alarm_status=models.OperationSellTo.objects.get(pk=_pk)
+        return alarm_status.SlackHook, alarm_status.SendMail
 
+    def AlarmSystem(self, alarms_buys, alarms_sells):
+        alarm_system_start =0
+        slack_alarm_t = sc_plugins.PluginSlackAlarm(self.version)
+        conf_webhook = models.SlackWebHook.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).last().hook
+        slack_alarm_t.PluginInitialize(conf_webhook)
+        err_buys=0; err_sells=0 
+        if alarms_buys is None:
+            logging.warning("No buys alarms")
+            err_buys = 1
+        if alarms_sells is None:
+            logging.warning("No sells alarms")
+            err_sells = 1
+        if err_buys and err_sells:
+            return False
+        for ops in alarms_buys:
+            slack_alarm, mail_alarms = self.AlarmBuy(ops['pk'])
+            info_buy = models.OperationBuy.objects.get(pk=ops['pk'])
+            coin=info_buy.DigitalCoin; esperado=info_buy.ValorExpected 
+            Cotizado=ops['quoted_value']; descripcion=info_buy.Description
+            message = self.__MessageLogGen("buy_alarm", coin, Cotizado, esperado, descripcion)
+            if slack_alarm:
+                slack_alarm_t.AppendMessage(message)
+                alarm_system_start +=1
+        if alarm_system_start > 0:
+            slack_alarm_t.start()
+            slack_alarm_t.join()
 
 running=True
 if __name__ == '__main__':
@@ -275,7 +317,10 @@ if __name__ == '__main__':
     Sc.balance_Operationlogging(balances)
     while running:
         try:
-            dic_operations = Sc.OperationHandler()
+            lists_compras, lists_ventas = Sc.OperationHandler()
+            print(f"lists compras {lists_compras} lists ventas {lists_ventas}")
+            Sc.AlarmSystem(lists_compras, lists_ventas)
+            #Sistema de Aalarms como Slack y el mail
             time.sleep(Sc.GetConfigScanerRefresh())
         except ValueError as e:
             logging.error("%s", e.message)
