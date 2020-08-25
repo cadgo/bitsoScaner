@@ -4,28 +4,31 @@ import bitso, decimal
 import sys, re
 sys.path.insert(1, '/home/carlos_diaz_s3c/python/cdtool')
 from SrvPost import slackWebHookPost
+from cdmail import SendMailAlertGmail
 class plugin():
-         """
-             clase que nos ayudara con el tema del multithread, todo lo que herede de aqui debe trabanar como un plug in independiente corriendo como hilo
-             y solo realizando ciertas tareas muy especificas
-     
-             plugin de alarmas
-             plugin de ventas
-             plugin de compras
-         """
-         plist = [] 
-         def __init__(self, **kwargs):
-             self.PluginName = type(self).__name__ 
-             self.PlugIndescription = kwargs.get('desc')
-             self._Initialized = False
-         
-         def PluginInitialize(self):
-             if not self._Initialized:
-                 raise RuntimeError("Plugin not initialized")
-             plugin.plist.append(self)
-         
-         def __str__(self):
-            return f"{self.PluginName}: Pluin Class Handler"
+    """
+        clase que nos ayudara con el tema del multithread, todo lo que herede de aqui debe trabajar como un plug in independiente corriendo como hilo
+        y solo realizando ciertas tareas muy especificas
+
+        plugin de alarmas
+        plugin de ventas
+        plugin de compras
+    """
+    def __init__(self, **kwargs):
+        self.PluginName = type(self).__name__
+        self.PlugIndescription = kwargs.get('desc')
+        self._Initialized = False
+
+    def PluginInitialize(self):
+        if not self._Initialized:
+            raise RuntimeError("Plugin not initialized")
+
+    def __str__(self):
+        return f"{self.PluginName}: Pluin Class Handler"
+    
+    def run(self):
+        if not self._Initialized:
+            raise RuntimeError("Can't run without initilization")
 
 class BitsoApiPlugin(plugin):
     def __init__(self, **kwargs):
@@ -71,6 +74,7 @@ class BalanceUpdater(BitsoApiPlugin, threading.Thread):
         """
             Corre como demonio actaulizando los balances en la BalanceDeamon
         """
+        super().run()
         RetBalance = {self.coin_ask:0}
         bal = self.BitConn.balances()
         #if len(self.SupportedCoins) == 0 or self.UsedMail==None:
@@ -109,6 +113,7 @@ class PluginQuoteStandardandSell(BitsoApiPlugin, threading.Thread):
         return True
 
     def run(self):
+        super().run()
         retdic = {'pk':None, 'quoted_value':None}
         book = self.DigitalCoin+'_mxn'
         decimal.getcontext().prec=8
@@ -154,6 +159,7 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
         return True
 
     def run(self):
+        super().run()
         retdic= {'pk':None, 'quoted_value':None}
         book=self.DigitalCoin+'_mxn'
         last_coin_value = decimal.Decimal(self.BitConn.ticker(book).last)
@@ -163,8 +169,9 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
         else:
             self.queue_remaining_buy_pks.put(retdic)
 class PluginAlarms(plugin):
-    def __init__(self, **kwargs):
+    def __init__(self, reference_data, **kwargs):
         self.message = ""
+        self.reference= reference_data
         super().__init__(**kwargs)
 
     def AppendMessage(self, amessage):
@@ -177,8 +184,7 @@ class PluginAlarms(plugin):
 
 class PluginSlackAlarm(PluginAlarms, threading.Thread):
     def __init__(self, reference_data="",  **kwargs):
-        self.reference = reference_data
-        super().__init__(**kwargs)
+        super().__init__(reference_data, **kwargs)
         threading.Thread.__init__(self)
     
     def PluginInitialize(self, webhook):
@@ -186,10 +192,54 @@ class PluginSlackAlarm(PluginAlarms, threading.Thread):
         if len(webhook) > 0 or re.match(hook_regex, webhook) != None:
             self.webhook = webhook
             self._Initialized = True
+            super().PluginInitialize()
         else: 
             self._Initialized = False
             raise ValueError("webhook parameter error")
 
     def run(self):
+        super().run()
         prog_message = self.reference + '\n' + self.message
         slackWebHookPost(self.webhook, prog_message)
+
+
+class PluginMailAlarm(PluginAlarms, threading.Thread):
+    def __init__(self, reference_data, **kwargs):
+        super().__init__(reference_data, **kwargs)
+        threading.Thread.__init__(self)
+
+    def __StringNotEmtpy(self,value):
+        if len(value) <= 0:
+            return False
+        else:
+            return True
+    
+    def __ValidEmail(self, mail):
+        mail_regex="^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$"
+        if re.match(mail_regex, mail) != None:
+            return True
+        else:
+            return False
+
+    def PluginInitialize(self,**kwargs): 
+        self.sender = kwargs['sender'] if self.__StringNotEmtpy(kwargs['sender']) else False
+        self.receivers = kwargs['receivers'] if self.__StringNotEmtpy(kwargs['receivers']) else False
+        self.sender_password = kwargs['sender_password'] if self.__StringNotEmtpy(kwargs['sender_password']) else False
+        self.subject = kwargs['subject'] if self.__StringNotEmtpy(kwargs['subject']) else False
+        print(self.sender)
+        if not self.__ValidEmail(self.sender):
+            raise ValueError("Invalid Mail Value")
+        print(self.receivers)
+        if not self.__ValidEmail(self.receivers):
+            pass
+            #raise ValueError("Invalid Receivers Value")
+        if self.sender or self.receivers or self.sender_password or self.subject or self.mail_body:
+            self._Initialized = True
+            super().PluginInitialize()
+        else:
+            self._Initialized = False
+
+
+    def run(self):
+        super().run()
+        SendMailAlertGmail(self.sender, self.receivers, self.sender_password, self.subject,self.message)

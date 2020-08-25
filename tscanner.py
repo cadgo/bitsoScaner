@@ -141,6 +141,7 @@ class Scanner():
             yield False
         for mds in models_buy:
              yield mds
+
     def LoggingSeparator(self, message, prf='='):
         pads = prf*15
         logging.info("%s [%s] %s", pads, message, pads)
@@ -157,6 +158,8 @@ class Scanner():
             return f"{args[0]} Tiene un valor {args[1]} esperamos {args[2]} == Descripcion {args[3]} | Flags: Mail {args[4]} Slack {args[5]} AS {args[6]}"
         elif OP == "buy_alarm":
             return f"{args[0]} Tiene un valor [{args[1]}] esperamos [{args[2]}] Descripcion [{args[3]}]"
+        elif OP == "sell_alarm":
+            return f"{args[0]} = {args[1]} - [Cot x {args[2]}] - [Esperado x {args[3]}] == Descripcion {args[4]}"
 
     def LoggingOps(self,  ops, desc_limit_v=15):
         """
@@ -265,40 +268,89 @@ class Scanner():
                 self.LoggingOps(sells)
         return lists_ops_buy, lists_ops_sells 
     
-    def AlarmBuy(self,_pk):
+    def AlarmBuyTrueOrFalse(self,_pk):
         alarm_status=models.OperationBuy.objects.get(pk=_pk)
         return alarm_status.SlackHook, alarm_status.SendMail
     
-    def AlarmSell(self,_pk):
+    def AlarmSellTrueOrFalse(self,_pk):
         alarm_status=models.OperationSellTo.objects.get(pk=_pk)
         return alarm_status.SlackHook, alarm_status.SendMail
 
-    def AlarmSystem(self, alarms_buys, alarms_sells):
-        alarm_system_start =0
+    def __AlarmSystemMessage(self,alarms, op="buy"):
+        alarm_system_slack = 0
+        alarm_system_mail = 0
+        info_operation=None; message=None
+        slack_alarm = mail_alarms = None
         slack_alarm_t = sc_plugins.PluginSlackAlarm(self.version)
+        mail_alarm_t = sc_plugins.PluginMailAlarm(self.version)
         conf_webhook = models.SlackWebHook.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).last().hook
+        mail_data=models.SenderMailAccount.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).last()
         slack_alarm_t.PluginInitialize(conf_webhook)
+        mail_alarm_t.PluginInitialize(sender=mail_data.MailAccount, receivers=mail_data.MailReceivers, sender_password=mail_data.MailKey, subject=self.version)
+        for ops in alarms:
+            #slack_alarm, mail_alarms = self.AlarmBuyTrueOrFalse(ops['pk'])
+            if op == "buy":
+                slack_alarm, mail_alarms = self.AlarmBuyTrueOrFalse(ops['pk'])
+                info_operation = models.OperationBuy.objects.get(pk=ops['pk'])
+                coin=info_operation.DigitalCoin; esperado=info_operation.ValorExpected 
+                Cotizado=ops['quoted_value']; descripcion=info_operation.Description
+                message = self.__MessageLogGen("buy_alarm", coin, Cotizado, esperado, descripcion)
+            elif op == "sell":
+                slack_alarm, mail_alarms = self.AlarmSellTrueOrFalse(ops['pk'])
+                info_operation = models.OperationSellTo.objects.get(pk=ops['pk'])
+                coin=info_operation.DigitalCoin; balance= info_operation.Balance; Cotizado=ops['quoted_value']
+                esperado = info_operation.ValorExpected; descripcion = info_operation.Description
+                message = self.__MessageLogGen("sell_alarm", coin, balance,Cotizado, esperado, descripcion)
+            else:
+                return None, None
+            if slack_alarm:
+                slack_alarm_t.AppendMessage(message)
+                alarm_system_slack+=1
+            if mail_alarms:
+                mail_alarm_t.AppendMessage(message)
+                alarm_system_mail+=1
+        if alarm_system_slack == 0:
+            slack_alarm_t = None
+        if alarm_system_mail==0:
+            mail_alarm_t = None
+        return slack_alarm_t, mail_alarm_t
+
+    def AlarmSystem(self, alarms_buys, alarms_sells):
         err_buys=0; err_sells=0 
         if alarms_buys is None:
             logging.warning("No buys alarms")
             err_buys = 1
+        else:
+            slack_alarm_exec, mail_alarm_exec = self.__AlarmSystemMessage(alarms_buys, "buy")
+            if slack_alarm_exec != None:
+                print('Slack Alrm')
+                slack_alarm_exec.start()
+                slack_alarm_exec.join()
+            else:
+                logging.debug("Not possible to send Slack Message None Return")
+            if mail_alarm_exec != None:
+                mail_alarm_exec.start()
+                #mail_alarm_exec.join()
+            else:
+                logging.debug("Not possible to send Mail Message None Return")
         if alarms_sells is None:
             logging.warning("No sells alarms")
             err_sells = 1
+        else:
+            slack_alarm_exec, mail_alarm_exec = self.__AlarmSystemMessage(alarms_sells, "sell")
+            if slack_alarm_exec != None:
+                print('Slack Alrm')
+                slack_alarm_exec.start()
+                slack_alarm_exec.join()
+            else:
+                logging.debug("Not possible to send Slack Message None Return")
+            if mail_alarm_exec != None:
+                mail_alarm_exec.start()
+                #mail_alarm_exec.join()
+            else:
+                logging.debug("Not possible to send Mail Message None Return")
         if err_buys and err_sells:
             return False
-        for ops in alarms_buys:
-            slack_alarm, mail_alarms = self.AlarmBuy(ops['pk'])
-            info_buy = models.OperationBuy.objects.get(pk=ops['pk'])
-            coin=info_buy.DigitalCoin; esperado=info_buy.ValorExpected 
-            Cotizado=ops['quoted_value']; descripcion=info_buy.Description
-            message = self.__MessageLogGen("buy_alarm", coin, Cotizado, esperado, descripcion)
-            if slack_alarm:
-                slack_alarm_t.AppendMessage(message)
-                alarm_system_start +=1
-        if alarm_system_start > 0:
-            slack_alarm_t.start()
-            slack_alarm_t.join()
 
 running=True
 if __name__ == '__main__':
@@ -323,8 +375,8 @@ if __name__ == '__main__':
             #Sistema de Aalarms como Slack y el mail
             time.sleep(Sc.GetConfigScanerRefresh())
         except ValueError as e:
-            logging.error("%s", e.message)
-            time.slee(Sc.GetConfigScanerRefresh())
+            logging.error("%s", e)
+            time.sleep(Sc.GetConfigScanerRefresh())
         except KeyboardInterrupt:
             print("Saliendo de la aplicación")
             running=False
