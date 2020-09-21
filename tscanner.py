@@ -113,7 +113,26 @@ class Scanner():
             #logging.info("Actualizamos %s, con total %.6f", coin, total)
             q = models.BitsoBalance.objects.filter(BalanceCoin=coin).update(BalanceUpdate=timezone.now(), Balance=total)
             return  total
-       
+    
+    def InsertTickerDB(self, coin):
+        book = coin+"_mxn"
+        ticker = self.api.ticker(book) 
+        try:
+            ticker_database = models.BitsoTicker.objects.create(
+                    bookname=coin,
+                    ask=ticker.ask,
+                    bid=ticker.bid,
+                    high=ticker.high,
+                    last=ticker.last,
+                    low=ticker.low,
+                    datetime=ticker.created_at
+                    )
+            ticker_database.save()
+        except bitso.errors.ApiError as e:
+            return False
+        return True
+
+
     def balance_Operationlogging(self, balances):
         if len(balances) <= 0:
             logging.error("Balance_Operation: No hay balances")
@@ -325,7 +344,7 @@ class Scanner():
             if slack_alarm_exec != None:
                 print('Slack Alrm')
                 slack_alarm_exec.start()
-                slack_alarm_exec.join()
+                #slack_alarm_exec.join()
             else:
                 logging.debug("Not possible to send Slack Message None Return")
             if mail_alarm_exec != None:
@@ -341,7 +360,7 @@ class Scanner():
             if slack_alarm_exec != None:
                 print('Slack Alrm')
                 slack_alarm_exec.start()
-                slack_alarm_exec.join()
+                #slack_alarm_exec.join()
             else:
                 logging.debug("Not possible to send Slack Message None Return")
             if mail_alarm_exec != None:
@@ -351,6 +370,13 @@ class Scanner():
                 logging.debug("Not possible to send Mail Message None Return")
         if err_buys and err_sells:
             return False
+
+    def Auto_Sell_Buy(self, alarms_sell, alarsm_buy):
+        err_sell = 0
+        if alarms_sell is None:
+            err_sell = 1
+            logging.debug("AutoSell not Operations")
+
 
 running=True
 if __name__ == '__main__':
@@ -367,6 +393,9 @@ if __name__ == '__main__':
     balances = Sc.SupportedBalances()
     queue_balance= Sc.RunBalancePlugin(balances)
     Sc.balance_Operationlogging(balances)
+    for bal in models.OperationAction.SupportedCoins:
+        if not Sc.InsertTickerDB(bal[0]):
+            logging.error("Imposible to retrive ticker info coin %s", bal[0])
     while running:
         try:
             lists_compras, lists_ventas = Sc.OperationHandler()

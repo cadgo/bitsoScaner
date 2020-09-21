@@ -168,6 +168,7 @@ class PluginQuoteBuy(BitsoApiPlugin, threading.Thread):
             self.queue_valid_buy_pks.put(retdic)
         else:
             self.queue_remaining_buy_pks.put(retdic)
+
 class PluginAlarms(plugin):
     def __init__(self, reference_data, **kwargs):
         self.message = ""
