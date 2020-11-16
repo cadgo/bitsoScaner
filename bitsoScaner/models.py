@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.core.validators import MaxValueValidator, MinValueValidator
 # Create your models here.
 
 class OperationAction(models.Model):
@@ -64,7 +65,7 @@ class BitsoDataConfig(models.Model):
     BitsoAcount = models.OneToOneField(BitsoAcount, on_delete=models.CASCADE, primary_key=True)
     ConfigName=models.CharField(max_length=100)
     bitsoScanerRefresh = models.DecimalField(max_digits=2, decimal_places=0)
-    OperationTimeOut=models.IntegerField(default=3, help_text='Timeout Minutes')
+    OperationTimeOut=models.IntegerField(default=3, validators=[MinValueValidator(1),MaxValueValidator(10)], help_text='Timeout Minutes')
     quote1=models.FloatField(default=10000)    
     quote2=models.FloatField(default=10000)    
     quote3=models.FloatField(default=10000)

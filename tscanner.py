@@ -371,12 +371,21 @@ class Scanner():
         if err_buys and err_sells:
             return False
 
-    def Auto_Sell_Buy(self, alarms_sell, alarsm_buy):
-        err_sell = 0
-        if alarms_sell is None:
-            err_sell = 1
-            logging.debug("AutoSell not Operations")
-
+    def Auto_Sell(self, opid):
+        Q=models.OperationSellTo.objects.filter(Account__bitsomail=self.bitsoMail).get(pk=opid)
+        GeneralBalance = models.BitsoBalance.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).filter(BalanceCoin=Q.DigitalCoin).get().Balance
+        autosell=Q.AutoSell; CoinBalance=Q.Balance
+        coin=Q.DigitalCoin
+        pluginTimeOut = models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).last().OperationTimeOut
+        if autosell:
+            if CoinBalance <= GeneralBalance:
+                print(f"La moneda {coin} tienes un GB {GeneralBalance} y un CB {CoinBalance}")
+                #EN VES DE TOMAR EL ULTIMO PRECIO DE BD, MEJOR QUE SE CALCULE EL ULTIMO PRECIO
+                #ESTO LO HACEMOS DIVIDIENDO EL DIVIDIENDO EL PRECIO COTIZADO, CONTRA EL BALANCE DE MONEDAS
+                Q.AutoSell = False
+                Q.save()
+        else:
+            logging.warning("Not Autosell for Coin %s", coin)
 
 running=True
 if __name__ == '__main__':
@@ -401,7 +410,9 @@ if __name__ == '__main__':
             lists_compras, lists_ventas = Sc.OperationHandler()
             print(f"lists compras {lists_compras} lists ventas {lists_ventas}")
             Sc.AlarmSystem(lists_compras, lists_ventas)
-            #Sistema de Aalarms como Slack y el mail
+            if lists_ventas is not None:
+                for xx in lists_ventas:
+                    Sc.Auto_Sell(xx['pk'])
             time.sleep(Sc.GetConfigScanerRefresh())
         except ValueError as e:
             logging.error("%s", e)

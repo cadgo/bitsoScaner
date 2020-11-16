@@ -244,3 +244,33 @@ class PluginMailAlarm(PluginAlarms, threading.Thread):
     def run(self):
         super().run()
         SendMailAlertGmail(self.sender, self.receivers, self.sender_password, self.subject,self.message)
+
+
+class AutoSell_Plugin(plugin, threading.Thread):
+    def __init__(self, OID, **kwargs):
+        self.OID = OID
+        self.InitalTime = time.time()
+        self.sleepTime = 5
+        #El plugin checa cada 5 segundos la Operacion
+        super().__init__(**kwargs)
+
+    def PluginInitializ(self, **kwargs):
+        t= kwargs['timer']
+        if t > 0 and t < 10:
+            t = t * 60
+            self.exec_timer = t
+            self._Initialized = True
+            self.ExtraTime = t
+            super().PluginInitialize()
+        else:
+            self._Initialized= False
+
+    def run(self):
+        end_time = self.InitalTime + self.ExtraTime
+        r_time = self.InitalTime
+        while r_time < end_time:
+            print(f"Aun no se acaba la ejecucion del hilo con OID {self.OID}")
+            time.sleep(self.sleepTime)
+        else:
+            print(f"Ha finalizado la ejecucion del hilo con OID {self.OID}, despues de {self.ExtraTime}")
+            return
