@@ -188,7 +188,7 @@ class PluginSlackAlarm(PluginAlarms, threading.Thread):
         super().__init__(reference_data, **kwargs)
         threading.Thread.__init__(self)
     
-    def PluginInitialize(self, webhook):
+    def PluginInitialize(self,  webhook):
         hook_regex = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
         if len(webhook) > 0 or re.match(hook_regex, webhook) != None:
             self.webhook = webhook
@@ -253,9 +253,19 @@ class AutoSell_Plugin(plugin, threading.Thread):
         self.sleepTime = 5
         #El plugin checa cada 5 segundos la Operacion
         super().__init__(**kwargs)
+        threading.Thread.__init__(self)
 
-    def PluginInitializ(self, **kwargs):
+    def PluginInitialize(self, **kwargs):
+        """
+            timer- time to reach a sell time out how much time the offering is to going to be in bitso
+            Sleeptime - Time pooling the Opeartion
+            ApiOP - BitsoApi to interact
+        """
         t= kwargs['timer']
+        sleep = kwargs['SleepTime'] if kwargs['SleepTime'] < 0 or  kwargs['SleepTime'] < 10 else 3
+        self.ApiOp = kwargs['api_client']
+        if not isinstance(self.ApiOp, bitso.Api): 
+            raise ValueError("api_client invalid parameter")
         if t > 0 and t < 10:
             t = t * 60
             self.exec_timer = t
@@ -263,14 +273,34 @@ class AutoSell_Plugin(plugin, threading.Thread):
             self.ExtraTime = t
             super().PluginInitialize()
         else:
-            self._Initialized= False
+            raise ValueError("Timer needs to be between 1 and 10")
 
     def run(self):
+        super().run()
         end_time = self.InitalTime + self.ExtraTime
         r_time = self.InitalTime
         while r_time < end_time:
             print(f"Aun no se acaba la ejecucion del hilo con OID {self.OID}")
+            lookup = self.ApiOp.lookup_order([self.OID])[0]
+            status = lookup.status
+            if status == "closed":
+                print(f"Operation OID {self.OID}, closed")
+                return
+            elif status == "cancelled":
+                print(f"Operation OID {self.OID}, cancelled exit Thread")
+                return
+            elif status == "completed":
+                print(f"Operation OID {self.OID}, Exitosa :)")
+                #Enviar Email
+                #Actualizar el balance
+                return
+            else:
+                print(f"Opration {self.OID} Status {status}")
             time.sleep(self.sleepTime)
+            r_time=time.time()
+        print(f"Ha finalizado la ejecucion del hilo con OID {self.OID}, despues de {self.ExtraTime}")
+        if self.OID == self.ApiOp.cancel_order(self.OID)[0]:
+            print(f"shutting down operation {self.OID} del peer remoto")
         else:
-            print(f"Ha finalizado la ejecucion del hilo con OID {self.OID}, despues de {self.ExtraTime}")
-            return
+            print(f"Something wrong it was not posible to shutdown operation {self.OID}")
+        return

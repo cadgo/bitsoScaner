@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import django, os, time
+import django, os, time, uuid
 from plugins import sc_plugins
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangobitso.settings')
 django.setup()
@@ -376,14 +376,26 @@ class Scanner():
         GeneralBalance = models.BitsoBalance.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).filter(BalanceCoin=Q.DigitalCoin).get().Balance
         autosell=Q.AutoSell; CoinBalance=Q.Balance
         coin=Q.DigitalCoin
+        book=coin+'_mxn'
+        price=models.BitsoTicker.objects.filter(bookname=coin).latest('datetime').last
         pluginTimeOut = models.BitsoDataConfig.objects.filter(BitsoAcount__bitsomail=self.bitsoMail).last().OperationTimeOut
         if autosell:
             if CoinBalance <= GeneralBalance:
                 print(f"La moneda {coin} tienes un GB {GeneralBalance} y un CB {CoinBalance}")
                 #EN VES DE TOMAR EL ULTIMO PRECIO DE BD, MEJOR QUE SE CALCULE EL ULTIMO PRECIO
                 #ESTO LO HACEMOS DIVIDIENDO EL DIVIDIENDO EL PRECIO COTIZADO, CONTRA EL BALANCE DE MONEDAS
-                Q.AutoSell = False
-                Q.save()
+                #uuidtest = uuid.uuid1()
+                #t=sc_plugins.AutoSell_Plugin(uuidtest)
+                #ret = self.api.place_order(book='tusd_mxn', side='sell',order_type='limit', major='1', price='28')
+                ret = self.api.place_order(book=book, side='sell',order_type='limit', major=str(CoinBalance), price=str(price))
+                if ret.get('oid') == None:
+                    logging.error('It was not possible generate an order')
+                else:
+                    t = sc_plugins.AutoSell_Plugin(ret.get('oid'))
+                    t.PluginInitialize(timer=pluginTimeOut,SleepTime=3, api_client=self.api)
+                    Q.AutoSell = False
+                    Q.save()
+                    t.start()
         else:
             logging.warning("Not Autosell for Coin %s", coin)
 
